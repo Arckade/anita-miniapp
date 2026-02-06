@@ -1,69 +1,126 @@
 <script>
-  // 1. Lo stato
+  import { onMount, tick, afterUpdate } from 'svelte';
+
+  // --- api-config ---
+  const API_KEY = import.meta.env.VITE_GEMINI_KEY;
+  const MODEL_ID = "gemini-1.5-flash"; 
+
+  // --- cartella dei messaggi ---
   let messaggi = [
-    { testo: "Ciao! Pronto a chattare?", mittente: "AI" }
+    { testo: "Ciao! sono anita, di cosa vuoi parlare?", mittente: "AI" }
   ];
   let nuovoMessaggio = "";
+  let isLoading = false; // l'AI sta pensando
+  
+  // Riferimento al contenitore della chat per lo scroll
+  let chatContainer;
 
-  // 2. Funzione Invio
-  function inviaMessaggio() {
-    if (nuovoMessaggio.trim() === "") return;
+  async function inviaMessaggio() {
+    if (nuovoMessaggio.trim() === "" || isLoading) return;
 
-    // Aggiunge messaggio utente
+    // 1. Aggiunge messaggio utente
     messaggi = [...messaggi, { testo: nuovoMessaggio, mittente: "Io" }];
+    const testoUtente = nuovoMessaggio;
     
     // Pulisce input
     nuovoMessaggio = "";
+    isLoading = true;
 
-    // Simula AI
-    rispondiComeAI();
+    // Scorri in basso dopo aver aggiunto il messaggio utente
+    await tick();
+    scrollToBottom();
+
+    // 2. Chiama l'AI
+    await rispondiComeAI(testoUtente);
   }
   
-  // 3. Funzione AI
-  function rispondiComeAI() {
-    setTimeout(() => {
-        const ultimoMsg = messaggi[messaggi.length - 1].testo;
-        messaggi = [...messaggi, { testo: "Ho capito: " + ultimoMsg, mittente: "AI" }];
-    }, 1000);
+  async function rispondiComeAI(testoUtente) {
+    try {
+      // Prepara la cronologia per Gemini (formato richiesto dall'API)
+      const history = messaggi.map(m => ({
+        role: m.mittente === "Io" ? "user" : "model",
+        parts: [{ text: m.testo }]
+      }));
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_ID}:generateContent?key=${API_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: history,
+            generationConfig: { temperature: 0.7, maxOutputTokens: 500 }
+          })
+        }
+      );
+
+      const data = await response.json();
+      
+      // Estri risposta
+      const rispostaTesto = data.candidates[0]?.content?.parts[0]?.text || "Spiacente, errore.";
+
+      // Aggiunge messaggio AI
+      messaggi = [...messaggi, { testo: rispostaTesto, mittente: "AI" }];
+
+    } catch (error) {
+      console.error(error);
+      messaggi = [...messaggi, { testo: "Errore di connessione con l'AI.", mittente: "AI" }];
+    } finally {
+      isLoading = false;
+      // Scorri in basso quando l'AI ha risposto
+      await tick();
+      scrollToBottom();
+    }
   }
+
+  function scrollToBottom() {
+    if (chatContainer) {
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+  }
+  
+  // Ogni volta che i messaggi cambiano, scorri in basso
+  afterUpdate(() => {
+      scrollToBottom();
+  });
 </script>
 
-<!-- STILE: Assicura che il layout sia come una vera app -->
+<!-- STILE -->
 <style>
-  /* Toglie i margini di default del browser */
   :global(body) {
     margin: 0;
     padding: 0;
-    height: 100vh; /* Altezza tutto schermo */
-    background-color: #d1d7db; /* Sfondo grigio chiaro esterno */
-    font-family: sans-serif;
+    height: 100vh;
+    background-color: #d1d7db;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     display: flex;
-    justify-content: center; /* Centra la chat orizzontalmente */
+    justify-content: center;
   }
 
   main {
     width: 100%;
-    max-width: 500px; /* Larghezza simile a un telefono */
-    height: 100%; /* Occupa tutto l'altezza disponibile */
+    max-width: 500px;
+    height: 100%;
     background-color: #efeae2;
     display: flex;
-    flex-direction: column; /* Mette i figli in colonna (chat sopra, input sotto) */
-    border-left: 1px solid #ccc;
-    border-right: 1px solid #ccc;
+    flex-direction: column;
+    position: relative; /* Utile se volessi mettere un'animazione di scrittura */
+    box-shadow: 0 0 20px rgba(0,0,0,0.1);
   }
 
-  /* L'area dei messaggi */
   .chat-container {
-    flex: 1; /* Questo è il comando magico: prende tutto lo spazio che avanza */
+    flex: 1;
     padding: 20px;
-    overflow-y: auto; /* Abilita lo scroll solo qui */
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 10px;
-    background-image: url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png"); /* Sfondo sottile opzionale */
+    /* Sfondo WhatsApp pattern (se l'immagine non carica usa un colore fallback) */
+    background-color: #efeae2;
+    background-image: url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png");
+    background-blend-mode: overlay;
   }
 
-  /* Le bolle */
   .bolla {
     padding: 10px 15px;
     border-radius: 8px;
@@ -72,71 +129,103 @@
     line-height: 1.4;
     position: relative;
     word-wrap: break-word;
+    box-shadow: 0 1px 1px rgba(0,0,0,0.1);
+    
+    /* IMPORTANTE: Rispetta i ritorni a capo (\n) */
+    white-space: pre-wrap; 
   }
 
   .bolla.io {
-    background-color: #d9fdd3; /* Verde */
-    align-self: flex-end; /* A destra */
+    background-color: #d9fdd3;
+    align-self: flex-end;
     border-top-right-radius: 0;
   }
 
   .bolla.ai {
-    background-color: #ffffff; /* Bianco */
-    align-self: flex-start; /* A sinistra */
+    background-color: #ffffff;
+    align-self: flex-start;
     border-top-left-radius: 0;
   }
 
-  /* L'area input in basso */
   form {
     padding: 10px;
     background-color: #f0f2f5;
     display: flex;
     gap: 10px;
     border-top: 1px solid #ddd;
+    align-items: center;
   }
   
   input {
-    flex: 1; /* L'occupa tutto lo spazio orizzontale rimanente */
-    padding: 12px;
+    flex: 1;
+    padding: 12px 15px;
     border-radius: 20px;
-    border: 1px solid #ccc;
+    border: none; /* Più stile WhatsApp */
     outline: none;
+    background-color: #ffffff;
   }
 
   button {
     background-color: #008069;
     color: white;
     border: none;
-    padding: 0 20px;
-    border-radius: 20px;
+    /* Crea un cerchio per il bottone invio */
+    width: 45px; 
+    height: 45px;
+    border-radius: 50%; 
     cursor: pointer;
-    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    transition: transform 0.1s;
   }
   
-  button:hover {
-    background-color: #00a884;
+  button:active {
+    transform: scale(0.95);
+  }
+  
+  button:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+  }
+
+  /* Indicatore di caricamento */
+  .typing {
+    font-size: 12px;
+    color: #666;
+    margin-left: 20px;
+    margin-bottom: 5px;
+    font-style: italic;
+    height: 15px; /* Previene salti di layout */
   }
 </style>
 
-<!-- STRUTTURA HTML -->
+<!-- STRUTTURA -->
 <main>
-  <!-- Area Messaggi (con lo scroll) -->
-  <div class="chat-container">
+  <div class="chat-container" bind:this={chatContainer}>
     {#each messaggi as msg}
       <div class="bolla {msg.mittente === 'Io' ? 'io' : 'ai'}">
         {msg.testo}
       </div>
     {/each}
   </div>
+  
+  <!-- Indicatore "Sta scrivendo..." -->
+  {#if isLoading}
+    <div class="typing">L'assistente sta scrivendo...</div>
+  {/if}
 
-  <!-- Area Input (Fissa in basso) -->
-  <!-- Nota che è dentro main, ma FUORI da chat-container -->
   <form on:submit|preventDefault={inviaMessaggio}>
     <input 
       type="text" 
       placeholder="Scrivi un messaggio..." 
       bind:value={nuovoMessaggio} 
+      disabled={isLoading}
     />
-    <button type="submit">Invia</button>
+    <!-- Icona invio (simulata con + o >) -->
+    <button type="submit" disabled={isLoading || !nuovoMessaggio.trim()}>
+      ➤
+    </button>
   </form>
 </main>
