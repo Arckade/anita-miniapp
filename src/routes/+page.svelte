@@ -3,7 +3,7 @@
 
   // --- api-config ---
   const API_KEY = import.meta.env.VITE_GEMINI_KEY;
-  const MODEL_ID = "gemini-1.5-flash"; 
+  const MODEL_ID = "gemini-2.5-flash"; 
 
   // --- cartella dei messaggi ---
   let messaggi = [
@@ -33,7 +33,7 @@
     // 2. Chiama l'AI
     await rispondiComeAI(testoUtente);
   }
-  
+  console.log(API_KEY)
   async function rispondiComeAI(testoUtente) {
     try {
       // Prepara la cronologia per Gemini (formato richiesto dall'API)
@@ -55,7 +55,7 @@
       );
 
       const data = await response.json();
-      
+      console.log(data)
       // Estri risposta
       const rispostaTesto = data.candidates[0]?.content?.parts[0]?.text || "Spiacente, errore.";
 
