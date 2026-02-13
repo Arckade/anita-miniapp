@@ -1,9 +1,7 @@
 <script>
-  import { onMount, tick, afterUpdate } from 'svelte';
-
-  // --- api-config ---
-  const API_KEY = import.meta.env.VITE_GEMINI_KEY;
-  const MODEL_ID = "gemini-2.5-flash"; 
+  import { tick, afterUpdate } from 'svelte';
+  import { apiStore } from '../store.js';
+ 
 
   // --- cartella dei messaggi ---
   let messaggi = [
@@ -20,7 +18,6 @@
 
     // 1. Aggiunge messaggio utente
     messaggi = [...messaggi, { testo: nuovoMessaggio, mittente: "Io" }];
-    const testoUtente = nuovoMessaggio;
     
     // Pulisce input
     nuovoMessaggio = "";
@@ -31,43 +28,14 @@
     scrollToBottom();
 
     // 2. Chiama l'AI
-    await rispondiComeAI(testoUtente);
-  }
-  console.log(API_KEY)
-  async function rispondiComeAI(testoUtente) {
     try {
-      // Prepara la cronologia per Gemini (formato richiesto dall'API)
-      const history = messaggi.map(m => ({
-        role: m.mittente === "Io" ? "user" : "model",
-        parts: [{ text: m.testo }]
-      }));
-
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_ID}:generateContent?key=${API_KEY}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: history,
-            generationConfig: { temperature: 0.7, maxOutputTokens: 500 }
-          })
-        }
-      );
-
-      const data = await response.json();
-      console.log(data)
-      // Estri risposta
-      const rispostaTesto = data.candidates[0]?.content?.parts[0]?.text || "Spiacente, errore.";
-
-      // Aggiunge messaggio AI
-      messaggi = [...messaggi, { testo: rispostaTesto, mittente: "AI" }];
-
-    } catch (error) {
-      console.error(error);
+      const risposta = await apiStore.fetchData(messaggi);
+      messaggi = [...messaggi, { testo: risposta, mittente: "AI" }];
+    } catch (err) {
+      console.error(err);
       messaggi = [...messaggi, { testo: "Errore di connessione con l'AI.", mittente: "AI" }];
     } finally {
       isLoading = false;
-      // Scorri in basso quando l'AI ha risposto
       await tick();
       scrollToBottom();
     }
