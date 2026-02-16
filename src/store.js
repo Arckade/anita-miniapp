@@ -46,12 +46,10 @@ const createApiStore = () => {
         // Salviamo la risposta grezza nello store e fermiamo il caricamento
         update(state => ({
           ...state,
-          data,
+          data: rispostaTesto,
           loading: false
         }));
 
-        // Ritorniamo il testo della risposta al chiamante (es. il componente)
-        return rispostaTesto;
 
       } catch (err) {
         // Gestione errore

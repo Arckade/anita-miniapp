@@ -10,9 +10,9 @@ from google import genai  # Nuovo import
 load_dotenv()
 
 # Configura il Client
-api_key = os.getenv("GEMINI_API_KEY")
+api_key = os.getenv("VITE_GEMINI_KEY")
 if not api_key:
-    raise RuntimeError("GEMINI_API_KEY non trovata nel file .env")
+    raise RuntimeError("VITE_GEMINI_KEY non trovata nel file .env")
 
 # Con il nuovo SDK istanziamo direttamente il Client
 client = genai.Client(api_key=api_key)

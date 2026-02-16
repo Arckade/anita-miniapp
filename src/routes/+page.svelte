@@ -1,15 +1,15 @@
 <script>
-  import { tick, afterUpdate } from 'svelte';
-  import { apiStore } from '../store.js';
- 
+  import { tick, afterUpdate } from "svelte";
+  import { apiStore } from "../store.js";
+  import { get } from "svelte/store";
 
   // --- cartella dei messaggi ---
   let messaggi = [
-    { testo: "Ciao! sono anita, di cosa vuoi parlare?", mittente: "AI" }
+    { testo: "Ciao! sono anita, di cosa vuoi parlare?", mittente: "AI" },
   ];
   let nuovoMessaggio = "";
   let isLoading = false; // l'AI sta pensando
-  
+
   // Riferimento al contenitore della chat per lo scroll
   let chatContainer;
 
@@ -18,8 +18,9 @@
 
     // 1. Aggiunge messaggio utente
     messaggi = [...messaggi, { testo: nuovoMessaggio, mittente: "Io" }];
-    
+
     // Pulisce input
+    const inputText = nuovoMessaggio;
     nuovoMessaggio = "";
     isLoading = true;
 
@@ -29,11 +30,22 @@
 
     // 2. Chiama l'AI
     try {
-      const risposta = await apiStore.fetchData(messaggi);
-      messaggi = [...messaggi, { testo: risposta, mittente: "AI" }];
+      // Nota: passiamo 'messaggi' che contiene già il nuovo msg utente
+      await apiStore.fetchData(messaggi);
+
+      // 3. QUI AVVIENE LA MAGIA: Leggiamo la risposta dallo store
+      const storeState = get(apiStore);
+
+      if (storeState.data) {
+        // Aggiungiamo la risposta AI alla lista locale
+        messaggi = [...messaggi, { testo: storeState.data, mittente: "AI" }];
+      }
     } catch (err) {
       console.error(err);
-      messaggi = [...messaggi, { testo: "Errore di connessione con l'AI.", mittente: "AI" }];
+      messaggi = [
+        ...messaggi,
+        { testo: "Errore di connessione con l'AI.", mittente: "AI" },
+      ];
     } finally {
       isLoading = false;
       await tick();
@@ -46,12 +58,41 @@
       chatContainer.scrollTop = chatContainer.scrollHeight;
     }
   }
-  
+
   // Ogni volta che i messaggi cambiano, scorri in basso
   afterUpdate(() => {
-      scrollToBottom();
+    scrollToBottom();
   });
 </script>
+
+<!-- STRUTTURA -->
+<main>
+  <div class="chat-container" bind:this={chatContainer}>
+    {#each messaggi as msg}
+      <div class="bolla {msg.mittente === 'Io' ? 'io' : 'ai'}">
+        {msg.testo}
+      </div>
+    {/each}
+  </div>
+
+  <!-- Indicatore "Sta scrivendo..." -->
+  {#if isLoading}
+    <div class="typing">L'assistente sta scrivendo...</div>
+  {/if}
+
+  <form on:submit|preventDefault={inviaMessaggio}>
+    <input
+      type="text"
+      placeholder="Scrivi un messaggio..."
+      bind:value={nuovoMessaggio}
+      disabled={isLoading}
+    />
+    <!-- Icona invio (simulata con + o >) -->
+    <button type="submit" disabled={isLoading || !nuovoMessaggio.trim()}>
+      ➤
+    </button>
+  </form>
+</main>
 
 <!-- STILE -->
 <style>
@@ -60,7 +101,8 @@
     padding: 0;
     height: 100vh;
     background-color: #d1d7db;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+      Helvetica, Arial, sans-serif;
     display: flex;
     justify-content: center;
   }
@@ -73,7 +115,7 @@
     display: flex;
     flex-direction: column;
     position: relative; /* Utile se volessi mettere un'animazione di scrittura */
-    box-shadow: 0 0 20px rgba(0,0,0,0.1);
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
   }
 
   .chat-container {
@@ -97,10 +139,10 @@
     line-height: 1.4;
     position: relative;
     word-wrap: break-word;
-    box-shadow: 0 1px 1px rgba(0,0,0,0.1);
-    
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
+
     /* IMPORTANTE: Rispetta i ritorni a capo (\n) */
-    white-space: pre-wrap; 
+    white-space: pre-wrap;
   }
 
   .bolla.io {
@@ -123,7 +165,7 @@
     border-top: 1px solid #ddd;
     align-items: center;
   }
-  
+
   input {
     flex: 1;
     padding: 12px 15px;
@@ -138,9 +180,9 @@
     color: white;
     border: none;
     /* Crea un cerchio per il bottone invio */
-    width: 45px; 
+    width: 45px;
     height: 45px;
-    border-radius: 50%; 
+    border-radius: 50%;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -148,11 +190,11 @@
     font-size: 18px;
     transition: transform 0.1s;
   }
-  
+
   button:active {
     transform: scale(0.95);
   }
-  
+
   button:disabled {
     background-color: #ccc;
     cursor: not-allowed;
@@ -168,32 +210,3 @@
     height: 15px; /* Previene salti di layout */
   }
 </style>
-
-<!-- STRUTTURA -->
-<main>
-  <div class="chat-container" bind:this={chatContainer}>
-    {#each messaggi as msg}
-      <div class="bolla {msg.mittente === 'Io' ? 'io' : 'ai'}">
-        {msg.testo}
-      </div>
-    {/each}
-  </div>
-  
-  <!-- Indicatore "Sta scrivendo..." -->
-  {#if isLoading}
-    <div class="typing">L'assistente sta scrivendo...</div>
-  {/if}
-
-  <form on:submit|preventDefault={inviaMessaggio}>
-    <input 
-      type="text" 
-      placeholder="Scrivi un messaggio..." 
-      bind:value={nuovoMessaggio} 
-      disabled={isLoading}
-    />
-    <!-- Icona invio (simulata con + o >) -->
-    <button type="submit" disabled={isLoading || !nuovoMessaggio.trim()}>
-      ➤
-    </button>
-  </form>
-</main>
