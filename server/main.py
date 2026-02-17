@@ -1,10 +1,11 @@
 import os
-from typing import List
+from typing import List, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
-from google import genai  # Nuovo import
+from google import genai
+from google.genai import types  # 1. Importa types per la configurazione
 
 # Carica le variabili d'ambiente
 load_dotenv()
@@ -12,7 +13,6 @@ load_dotenv()
 # Configura il Client
 api_key = os.getenv("VITE_GEMINI_KEY") or os.getenv("GEMINI_API_KEY")
 
-# Con il nuovo SDK istanziamo il Client solo se abbiamo la chiave
 if api_key:
     client = genai.Client(api_key=api_key)
 else:
@@ -20,28 +20,24 @@ else:
 
 app = FastAPI()
 
-# --- Configurazione CORS per Svelte ---
+# --- Configurazione CORS ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173"
-    ],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
 # --- Modelli Dati ---
 class Message(BaseModel):
-    role: str  # "user" o "model"
+    role: str
     content: str
 
-
+# 2. Aggiorniamo ChatRequest per includere la lingua (opzionale con default)
 class ChatRequest(BaseModel):
     messages: List[Message]
-
+    language: str = "italiano"  # Default se non specificato
 
 # --- Rotte ---
 @app.post("/chat")
@@ -50,8 +46,7 @@ async def chat(request: ChatRequest):
         raise HTTPException(status_code=400, detail="Nessun messaggio fornito")
 
     try:
-        # Converti i messaggi Pydantic nel formato richiesto dal nuovo SDK
-        # Il nuovo SDK vuole una lista di dizionari: {"role": ..., "parts": [{"text": ...}]}
+        # Preparazione messaggi cronologico (history)
         sdk_messages = []
         for msg in request.messages:
             sdk_messages.append({
@@ -59,20 +54,33 @@ async def chat(request: ChatRequest):
                 "parts": [{"text": msg.content}]
             })
 
-        print(sdk_messages)
-
-        # Verifica che il client sia configurato
         if client is None:
-            raise HTTPException(status_code=500, detail="AI API key non configurata sul server. Imposta VITE_GEMINI_KEY o GEMINI_API_KEY.")
+            raise HTTPException(status_code=500, detail="AI API key non configurata.")
 
-        # Chiamata al metodo generate_content del Client
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=sdk_messages
+        # 3. Creiamo il System Prompt dinamico basato sulla lingua
+        # Questo istruisce il modello su come comportarsi PRIMA di leggere i messaggi
+        system_instruction_text = (
+            f"Sei un assistente utile e professionale. "
+            f"Rispondi esclusivamente in {request.language}. "
+            f"Non usare altre lingue a meno che non sia strettamente necessario per tradurre termini tecnici."
         )
 
-        # Estrazione del testo dalla risposta
-        # La struttura della risposta è complessa, navighiamo verso la parte di testo
+        # 4. Configurazione del modello con System Instruction
+        generate_content_config = types.GenerateContentConfig(
+            system_instruction=system_instruction_text,
+            # Puoi aggiungere altri parametri qui, es:
+            # temperature=0.7,
+            # max_output_tokens=512,
+        )
+
+        # 5. Passiamo la configurazione alla chiamata
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=sdk_messages,
+            config=generate_content_config  # <--- Qui passiamo il config
+        )
+
+        # Estrazione risposta
         response_text = ""
         if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
             response_text = response.candidates[0].content.parts[0].text
@@ -81,4 +89,5 @@ async def chat(request: ChatRequest):
 
     except Exception as e:
         print(f"Errore Gemini: {e}")
-        raise HTTPException(status_code=500, detail="Errore interno del server AI")
+        # Ritorniamo anche il dettaglio dell'errore per debug (opzionale)
+        raise HTTPException(status_code=500, detail=f"Errore interno del server AI: {str(e)}")
