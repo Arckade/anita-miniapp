@@ -10,12 +10,13 @@ from google import genai  # Nuovo import
 load_dotenv()
 
 # Configura il Client
-api_key = os.getenv("VITE_GEMINI_KEY")
-if not api_key:
-    raise RuntimeError("VITE_GEMINI_KEY non trovata nel file .env")
+api_key = os.getenv("VITE_GEMINI_KEY") or os.getenv("GEMINI_API_KEY")
 
-# Con il nuovo SDK istanziamo direttamente il Client
-client = genai.Client(api_key=api_key)
+# Con il nuovo SDK istanziamo il Client solo se abbiamo la chiave
+if api_key:
+    client = genai.Client(api_key=api_key)
+else:
+    client = None
 
 app = FastAPI()
 
@@ -59,6 +60,10 @@ async def chat(request: ChatRequest):
             })
 
         print(sdk_messages)
+
+        # Verifica che il client sia configurato
+        if client is None:
+            raise HTTPException(status_code=500, detail="AI API key non configurata sul server. Imposta VITE_GEMINI_KEY o GEMINI_API_KEY.")
 
         # Chiamata al metodo generate_content del Client
         response = client.models.generate_content(

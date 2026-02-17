@@ -3,9 +3,18 @@
   import { apiStore } from "../store.js";
   import { get } from "svelte/store";
 
+  // Lingua (it | en)
+  let language = 'it';
+
   // --- cartella dei messaggi ---
   let messaggi = [
-    { testo: "Ciao! sono anita, di cosa vuoi parlare?", mittente: "AI" },
+    {
+      testo:
+        language === 'en'
+          ? "Hi! I'm Anita — what would you like to talk about?"
+          : "Ciao! sono anita, di cosa vuoi parlare?",
+      mittente: "AI",
+    },
   ];
   let nuovoMessaggio = "";
   let isLoading = false; // l'AI sta pensando
@@ -44,7 +53,7 @@
       console.error(err);
       messaggi = [
         ...messaggi,
-        { testo: "Errore di connessione con l'AI.", mittente: "AI" },
+        { testo: language === 'en' ? "Connection error with the AI." : "Errore di connessione con l'AI.", mittente: "AI" },
       ];
     } finally {
       isLoading = false;
@@ -63,10 +72,38 @@
   afterUpdate(() => {
     scrollToBottom();
   });
+
+  // Settings dropdown
+  let showMenu = false;
+  let showLangOptions = false;
+
+  function toggleMenu(event) {
+    showMenu = !showMenu;
+  }
+
+  function selectLanguage() {
+    // Toggle inline language choices
+    showLangOptions = !showLangOptions;
+  }
+
+  function setLanguage(l) {
+    language = l;
+    showLangOptions = false;
+    showMenu = false;
+    // Inform the user in the selected language
+    const confirmation = l === 'en' ? 'Language set to English.' : 'Lingua impostata su Italiano.';
+    messaggi = [...messaggi, { testo: confirmation, mittente: 'AI' }];
+  }
+
+  function selectTemplate() {
+    showMenu = false;
+    // placeholder action
+    console.log("Template clicked");
+  }
 </script>
 
 <!-- STRUTTURA -->
-<main>
+<main on:click={() => { showMenu = false; showLangOptions = false }}>
   <div class="chat-container" bind:this={chatContainer}>
     {#each messaggi as msg}
       <div class="bolla {msg.mittente === 'Io' ? 'io' : 'ai'}">
@@ -77,13 +114,46 @@
 
   <!-- Indicatore "Sta scrivendo..." -->
   {#if isLoading}
-    <div class="typing">L'assistente sta scrivendo...</div>
+    <div class="typing">{language === 'en' ? "Assistant is typing..." : "L'assistente sta scrivendo..."}</div>
   {/if}
 
   <form on:submit|preventDefault={inviaMessaggio}>
+    <div class="settings-container" on:click|stopPropagation>
+      <button
+        type="button"
+        class="settings-button"
+        aria-label="Settings"
+        on:click={toggleMenu}
+      >
+        ⚙️
+      </button>
+
+      {#if showMenu}
+        <div class="settings-menu" on:click|stopPropagation>
+          <button type="button" class="menu-item" on:click={selectLanguage}>
+            {language === 'en' ? 'Language' : 'Lingua'}
+          </button>
+
+          {#if showLangOptions}
+            <div class="lang-options">
+              <button type="button" class="menu-item" on:click={() => setLanguage('it')}>
+                Italiano
+              </button>
+              <button type="button" class="menu-item" on:click={() => setLanguage('en')}>
+                English
+              </button>
+            </div>
+          {/if}
+
+          <button type="button" class="menu-item" on:click={selectTemplate}>
+            template
+          </button>
+        </div>
+      {/if}
+    </div>
     <input
       type="text"
-      placeholder="Scrivi un messaggio..."
+      placeholder={language === 'en' ? 'Write a message...' : 'Scrivi un messaggio...'}
       bind:value={nuovoMessaggio}
       disabled={isLoading}
     />
@@ -173,6 +243,61 @@
     border: none; /* Più stile WhatsApp */
     outline: none;
     background-color: #ffffff;
+  }
+
+  .settings-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .settings-button {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 18px;
+    margin-right: 6px;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .settings-menu {
+    position: absolute;
+    bottom: 50px;
+    left: 0;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+    display: flex;
+    flex-direction: column;
+    padding: 6px;
+    min-width: 120px;
+    z-index: 30;
+  }
+
+  .menu-item {
+    background: transparent;
+    border: none;
+    padding: 8px 12px;
+    text-align: center;
+    cursor: pointer;
+    border-radius: 6px;
+  }
+
+  .menu-item:hover {
+    background: #f3f4f6;
+  }
+
+  .lang-options {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    /* indent the language choices so they appear further to the right */
+    padding-left: 20px;
   }
 
   button {
