@@ -13,7 +13,7 @@ const createApiStore = () => {
 
   return {
     subscribe, // Esporiamo subscribe per renderlo reattivo nei componenti
-    fetchData: async (messaggi) => {
+    fetchData: async (messaggi, language = 'it') => {
       // Aggiorniamo lo stato: inizio caricamento
       update(state => ({ ...state, loading: true, error: null }));
 
@@ -26,10 +26,13 @@ const createApiStore = () => {
 
         // Chiamata al nostro backend FastAPI (/chat)
         const backend = import.meta.env.VITE_BACKEND || 'http://localhost:8000';
+        // Convertiamo il codice lingua ('it'|'en') in un nome leggibile per il prompt
+        const languageName = language === 'en' ? 'English' : (language === 'it' ? 'Italiano' : language);
+
         const response = await fetch(`${backend}/chat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages })
+          body: JSON.stringify({ messages, language: languageName })
         });
 
         if (!response.ok) {

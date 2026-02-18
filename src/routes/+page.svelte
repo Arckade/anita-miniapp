@@ -39,8 +39,8 @@
 
     // 2. Chiama l'AI
     try {
-      // Nota: passiamo 'messaggi' che contiene già il nuovo msg utente
-      await apiStore.fetchData(messaggi);
+      // Nota: passiamo 'messaggi' che contiene già il nuovo msg utente e la lingua corrente
+      await apiStore.fetchData(messaggi, language);
 
       // 3. QUI AVVIENE LA MAGIA: Leggiamo la risposta dallo store
       const storeState = get(apiStore);
