@@ -1,9 +1,14 @@
 import os
 from typing import List, Optional
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
+import httpx
+import subprocess
+from pathlib import Path
+import logging
+import time
 from google import genai
 from google.genai import types  # 1. Importa types per la configurazione
 
@@ -13,6 +18,9 @@ load_dotenv()
 # Configura il Client
 api_key = os.getenv("VITE_GEMINI_KEY") or os.getenv("GEMINI_API_KEY")
 
+# Optional OpenAI key for transcription (Whisper)
+openai_key = os.getenv("OPENAI_API_KEY")
+
 if api_key:
     client = genai.Client(api_key=api_key)
 else:
@@ -20,11 +28,12 @@ else:
 
 app = FastAPI()
 
+logging.basicConfig(level=logging.INFO)
+
 # --- Configurazione CORS ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-    allow_credentials=True,
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -91,3 +100,77 @@ async def chat(request: ChatRequest):
         print(f"Errore Gemini: {e}")
         # Ritorniamo anche il dettaglio dell'errore per debug (opzionale)
         raise HTTPException(status_code=500, detail=f"Errore interno del server AI: {str(e)}")
+
+
+@app.post('/upload-audio')
+async def upload_audio(file: UploadFile = File(...), language: str = Form('italiano')):
+    try:
+        # Cartella per salvare le registrazioni
+        base_dir = os.path.dirname(__file__)
+        rec_dir = os.path.join(base_dir, 'recordings')
+        os.makedirs(rec_dir, exist_ok=True)
+
+        filename = f"voice-{int(__import__('time').time()*1000)}-{file.filename}"
+        safe_path = os.path.join(rec_dir, filename)
+
+        # Salva il file
+        with open(safe_path, 'wb') as f:
+            content = await file.read()
+            f.write(content)
+
+        # Prova a trascrivere usando OpenAI Whisper se la chiave è configurata
+        transcription = None
+        converted = False
+        converted_path = None
+
+        # If file format is not optimal for STT, try converting to WAV (mono, 16k)
+        try:
+            src_path = Path(safe_path)
+            ext = src_path.suffix.lower()
+            # If source is not wav/flac/mp3, try conversion
+            if ext not in ['.wav', '.flac', '.mp3']:
+                converted_path = str(src_path.with_suffix('.wav'))
+                logging.info(f"Attempting conversion {safe_path} -> {converted_path}")
+                # ffmpeg must be installed on the host
+                subprocess.run([
+                    'ffmpeg', '-y', '-i', safe_path,
+                    '-ar', '16000', '-ac', '1', converted_path
+                ], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                converted = True
+        except subprocess.CalledProcessError as e:
+            logging.warning(f"ffmpeg conversion failed: {e.stderr.decode('utf-8', errors='ignore')}")
+            converted = False
+            converted_path = None
+        except Exception as e:
+            logging.warning(f"Conversion check error: {e}")
+            converted = False
+            converted_path = None
+
+        if openai_key:
+            try:
+                audio_to_send = converted_path if converted_path else safe_path
+                async with httpx.AsyncClient(timeout=120.0) as client:
+                    with open(audio_to_send, 'rb') as fh:
+                        files = {
+                            'file': (Path(audio_to_send).name, fh, file.content_type or 'audio/wav')
+                        }
+                        data = {'model': 'whisper-1'}
+                        if language:
+                            data['language'] = 'en' if language.lower().startswith('en') else 'it'
+
+                        headers = {'Authorization': f'Bearer {openai_key}'}
+                        logging.info(f"Sending file {audio_to_send} to Whisper for transcription")
+                        resp = await client.post('https://api.openai.com/v1/audio/transcriptions', headers=headers, data=data, files=files)
+                        if resp.status_code == 200:
+                            j = resp.json()
+                            transcription = j.get('text')
+                            logging.info(f"Transcription result: {transcription}")
+                        else:
+                            logging.warning(f"Transcription failed: {resp.status_code} {resp.text}")
+            except Exception as e:
+                logging.exception(f"Errore during transcription: {e}")
+
+        return {"filename": filename, "transcription": transcription, "converted": converted, "message": "uploaded"}
+    except Exception as e:
+        print(f"Errore upload audio: {e}")
+        raise HTTPException(status_code=500, detail=f"Errore salvataggio audio: {str(e)}")

@@ -60,6 +60,36 @@ const createApiStore = () => {
         throw err;
       }
     },
+    // Carica un file audio al backend
+    uploadAudio: async (file, language = 'it') => {
+      update(state => ({ ...state, loading: true, error: null }));
+
+      try {
+        const backend = import.meta.env.VITE_BACKEND || 'http://localhost:8000';
+        const form = new FormData();
+        form.append('file', file, file.name || 'voice.webm');
+        form.append('language', language);
+
+        const response = await fetch(`${backend}/upload-audio`, {
+          method: 'POST',
+          body: form,
+        });
+
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(`Server error ${response.status}: ${text}`);
+        }
+
+        const data = await response.json();
+
+        update(state => ({ ...state, data: data, loading: false }));
+
+        return data;
+      } catch (err) {
+        update(state => ({ ...state, error: err.message, loading: false }));
+        throw err;
+      }
+    },
     reset: () => set(initialState) // Opzionale: per resettare lo store
   };
 };

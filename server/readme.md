@@ -7,4 +7,5 @@ uvicorn server.main:app --reload --port 8000
 
 ngrok
 ngrok config add-authtoken 3A5DqfLTOCsml0cZVpLrX3YhWqH_5KAXmwcPWfYKcE9EqzfML
-https://unexcrescent-unrepudiated-tanna.ngrok-free.dev 
+https://unexcrescent-unrepudiated-tanna.ngrok-free.dev
+https://helpful-tiramisu-d6c0ce.netlify.app

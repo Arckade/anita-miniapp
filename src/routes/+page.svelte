@@ -1,5 +1,5 @@
 <script>
-  import { tick, afterUpdate } from "svelte";
+  import { tick, afterUpdate, onMount } from "svelte";
   import { apiStore } from "../store.js";
   import { get } from "svelte/store";
 
@@ -18,6 +18,10 @@
   ];
   let nuovoMessaggio = "";
   let isLoading = false; // l'AI sta pensando
+  let isRecording = false; // registrazione audio in corso
+  let mediaRecorder = null;
+  let mediaStream = null;
+  let chunks = [];
 
   // Riferimento al contenitore della chat per lo scroll
   let chatContainer;
@@ -62,6 +66,79 @@
     }
   }
 
+  async function startRecording() {
+    if (isRecording) return;
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder = new MediaRecorder(mediaStream);
+      chunks = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunks.push(e.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        const blob = new Blob(chunks, { type: chunks[0]?.type || 'audio/webm' });
+        const file = new File([blob], `voice-${Date.now()}.webm`, { type: blob.type });
+
+        // Indica che stiamo inviando
+        isLoading = true;
+        try {
+          const res = await apiStore.uploadAudio(file, language);
+
+          // Aggiungi un messaggio utente rappresentando il file o trascrizione
+          if (res && res.transcription) {
+            messaggi = [...messaggi, { testo: res.transcription, mittente: 'Io' }];
+            // Dopo aver aggiunto il testo trascritto chiamiamo l'AI
+            await tick();
+            await apiStore.fetchData(messaggi, language);
+            const storeState = get(apiStore);
+            if (storeState.data) {
+              messaggi = [...messaggi, { testo: storeState.data, mittente: 'AI' }];
+            }
+          } else if (res && res.filename) {
+            // Se non c'è trascrizione, mandiamo un segnaposto testuale al backend
+            const placeholder = `[Audio file: ${res.filename}]`;
+            messaggi = [...messaggi, { testo: placeholder, mittente: 'Io' }];
+            await tick();
+            await apiStore.fetchData(messaggi, language);
+            const storeState = get(apiStore);
+            if (storeState.data) {
+              messaggi = [...messaggi, { testo: storeState.data, mittente: 'AI' }];
+            }
+          } else {
+            messaggi = [...messaggi, { testo: language === 'en' ? 'Audio uploaded.' : 'Audio inviato.', mittente: 'Io' }];
+          }
+        } catch (err) {
+          console.error(err);
+          messaggi = [...messaggi, { testo: language === 'en' ? 'Audio upload failed.' : 'Invio audio fallito.', mittente: 'AI' }];
+        } finally {
+          isLoading = false;
+          // stop tracks
+          if (mediaStream) {
+            mediaStream.getTracks().forEach(t => t.stop());
+            mediaStream = null;
+          }
+        }
+      };
+
+      mediaRecorder.start();
+      isRecording = true;
+    } catch (err) {
+      console.error('Could not start recording', err);
+    }
+  }
+
+  function stopRecording() {
+    if (!isRecording) return;
+    isRecording = false;
+    try {
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
   function scrollToBottom() {
     if (chatContainer) {
       chatContainer.scrollTop = chatContainer.scrollHeight;
@@ -100,6 +177,32 @@
     // placeholder action
     console.log("Template clicked");
   }
+
+  // Gestione tasti Enter per registrazione "hold-to-record"
+  onMount(() => {
+    function down(e) {
+      if (e.key === 'Enter') {
+        // Previeni l'invio normale del form quando iniziamo a registrare
+        e.preventDefault();
+        if (!isRecording && !isLoading) startRecording();
+      }
+    }
+
+    function up(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (isRecording) stopRecording();
+      }
+    }
+
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+    };
+  });
 </script>
 
 <!-- STRUTTURA -->
