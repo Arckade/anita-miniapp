@@ -184,3 +184,6 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+
+# Le mie esclusioni personalizzate
+server/recordings

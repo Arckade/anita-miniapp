@@ -97,10 +97,11 @@
               messaggi = [...messaggi, { testo: storeState.data, mittente: 'AI' }];
             }
           } else if (res && res.filename) {
-            // Se non c'è trascrizione, mandiamo un segnaposto testuale al backend
+            // Aggiungiamo il messaggio con riferimento al file audio
             const placeholder = `[Audio file: ${res.filename}]`;
-            messaggi = [...messaggi, { testo: placeholder, mittente: 'Io' }];
+            messaggi = [...messaggi, { testo: placeholder, audio: res.filename, mittente: 'Io' }];
             await tick();
+            // Inoltriamo comunque il riferimento all'AI (il backend può gestirlo)
             await apiStore.fetchData(messaggi, language);
             const storeState = get(apiStore);
             if (storeState.data) {
@@ -203,6 +204,19 @@
       window.removeEventListener('keyup', up);
     };
   });
+
+  // Riproduci un file audio salvato sul server
+  function playAudio(filename) {
+    try {
+      const backend = import.meta.env.VITE_BACKEND || '';
+      // If backend is empty, assume same origin
+      const url = backend ? `${backend.replace(/\/$/, '')}/recordings/${filename}` : `/recordings/${filename}`;
+      const audio = new Audio(url);
+      audio.play().catch(err => console.error('Audio play failed', err));
+    } catch (e) {
+      console.error('playAudio error', e);
+    }
+  }
 </script>
 
 <!-- STRUTTURA -->
@@ -210,7 +224,13 @@
   <div class="chat-container" bind:this={chatContainer}>
     {#each messaggi as msg}
       <div class="bolla {msg.mittente === 'Io' ? 'io' : 'ai'}">
-        {msg.testo}
+        {#if msg.audio}
+          <button type="button" class="play-audio" on:click={() => playAudio(msg.audio)} aria-label="Play audio">
+            ▶️
+          </button>
+        {:else}
+          {msg.testo}
+        {/if}
       </div>
     {/each}
   </div>
@@ -260,6 +280,20 @@
       bind:value={nuovoMessaggio}
       disabled={isLoading}
     />
+    <!-- Pulsante registrazione accanto alla barra di input -->
+    <button
+      type="button"
+      class="record-button"
+      aria-label="Hold to record"
+      on:mousedown|preventDefault={startRecording}
+      on:mouseup|preventDefault={stopRecording}
+      on:mouseleave|preventDefault={stopRecording}
+      on:touchstart|preventDefault={startRecording}
+      on:touchend|preventDefault={stopRecording}
+    >
+      ⏺
+    </button>
+
     <!-- Icona invio (simulata con + o >) -->
     <button type="submit" disabled={isLoading || !nuovoMessaggio.trim()}>
       ➤
@@ -427,6 +461,23 @@
     background-color: #ccc;
     cursor: not-allowed;
   }
+
+  /* Style for the record button next to input */
+  .record-button {
+    background-color: #b91c1c; /* red */
+    color: white;
+    border: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+  }
+
+  .record-button:active { transform: scale(0.96); }
 
   /* Indicatore di caricamento */
   .typing {

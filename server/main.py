@@ -1,6 +1,7 @@
 import os
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -29,6 +30,14 @@ else:
 app = FastAPI()
 
 logging.basicConfig(level=logging.INFO)
+
+# Directory to serve saved recordings
+BASE_DIR = os.path.dirname(__file__)
+RECORDINGS_DIR = os.path.join(BASE_DIR, 'recordings')
+os.makedirs(RECORDINGS_DIR, exist_ok=True)
+
+# Mount recordings as static files at /recordings
+app.mount('/recordings', StaticFiles(directory=RECORDINGS_DIR), name='recordings')
 
 # --- Configurazione CORS ---
 app.add_middleware(
