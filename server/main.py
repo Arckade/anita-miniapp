@@ -1,6 +1,7 @@
 import os
-from typing import List, Optional
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+import json
+from typing import List
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -9,7 +10,6 @@ import httpx
 import subprocess
 from pathlib import Path
 import logging
-import time
 from google import genai
 from google.genai import types  # 1. Importa types per la configurazione
 
@@ -47,69 +47,98 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # --- Modelli Dati ---
 class Message(BaseModel):
     role: str
     content: str
+
 
 # 2. Aggiorniamo ChatRequest per includere la lingua (opzionale con default)
 class ChatRequest(BaseModel):
     messages: List[Message]
     language: str = "italiano"  # Default se non specificato
 
+
 # --- Rotte ---
-@app.post("/chat")
-async def chat(request: ChatRequest):
-    if not request.messages:
-        raise HTTPException(status_code=400, detail="Nessun messaggio fornito")
 
+@app.websocket("/chat")
+async def chat(websocket: WebSocket):
+    await websocket.accept()
     try:
-        # Preparazione messaggi cronologico (history)
-        sdk_messages = []
-        for msg in request.messages:
-            sdk_messages.append({
-                "role": "user" if msg.role == "user" else "model",
-                "parts": [{"text": msg.content}]
-            })
+        # --- AGGIUNTO WHILE TRUE ---
+        while True:
+            # 1. Ricezione del messaggio JSON dal client
+            # Questa istruzione mette in pausa l'esecuzione finché non arriva un messaggio
+            data = await websocket.receive_text()
 
-        if client is None:
-            raise HTTPException(status_code=500, detail="AI API key non configurata.")
+            # 2. Parsing e validazione dei dati
+            try:
+                payload = json.loads(data)
+                request = ChatRequest(**payload)
+            except ValueError as e:
+                await websocket.send_json({"error": f"JSON non valido: {str(e)}"})
+                continue  # Modificato da 'return' a 'continue' per non chiudere la connessione
+            except Exception as e:
+                await websocket.send_json({"error": f"Errore di validazione: {str(e)}"})
+                continue  # Modificato da 'return' a 'continue'
 
-        # 3. Creiamo il System Prompt dinamico basato sulla lingua
-        # Questo istruisce il modello su come comportarsi PRIMA di leggere i messaggi
-        system_instruction_text = (
-            f"Sei un assistente utile e professionale. "
-            f"Rispondi esclusivamente in {request.language}. "
-            f"Non usare altre lingue a meno che non sia strettamente necessario per tradurre termini tecnici."
-        )
+            if not request.messages:
+                await websocket.send_json({"error": "Nessun messaggio fornito"})
+                continue  # Modificato da 'return' a 'continue'
 
-        # 4. Configurazione del modello con System Instruction
-        generate_content_config = types.GenerateContentConfig(
-            system_instruction=system_instruction_text,
-            # Puoi aggiungere altri parametri qui, es:
-            # temperature=0.7,
-            # max_output_tokens=512,
-        )
+            # Preparazione messaggi cronologico (history)
+            sdk_messages = []
+            for msg in request.messages:
+                sdk_messages.append({
+                    "role": "user" if msg.role == "user" else "model",
+                    "parts": [{"text": msg.content}]
+                })
 
-        # 5. Passiamo la configurazione alla chiamata
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=sdk_messages,
-            config=generate_content_config  # <--- Qui passiamo il config
-        )
+            if client is None:
+                await websocket.send_json({"error": "AI API key non configurata."})
+                return
 
-        # Estrazione risposta
-        response_text = ""
-        if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
-            response_text = response.candidates[0].content.parts[0].text
+            # 3. Creiamo il System Prompt dinamico
+            system_instruction_text = (
+                f"Sei un assistente utile e professionale. "
+                f"Rispondi esclusivamente in {request.language}. "
+                f"Non usare altre lingue a meno che non sia strettamente necessario per tradurre termini tecnici."
+            )
 
-        return {"response": response_text}
+            # 4. Configurazione del modello
+            generate_content_config = types.GenerateContentConfig(
+                system_instruction=system_instruction_text,
+            )
 
+            # 5. Chiamata all'API AI
+            # Qui usiamo await, ma la libreria google-genai potrebbe essere sincrona.
+            # Se ottieni un errore di "coroutine never awaited", rimuovi await qui.
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=sdk_messages,
+                config=generate_content_config
+            )
+
+            # Estrazione risposta
+            response_text = ""
+            if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
+                response_text = response.candidates[0].content.parts[0].text
+
+            # 6. Invio della risposta
+            await websocket.send_json({"response": response_text})
+
+            # --- FINE CICLO ---
+            # Una volta arrivati qui, il ciclo ricomincia e aspetta il prossimo messaggio
+
+    except WebSocketDisconnect:
+        logging.info("Client disconnesso intenzionalmente")
     except Exception as e:
-        print(f"Errore Gemini: {e}")
-        # Ritorniamo anche il dettaglio dell'errore per debug (opzionale)
-        raise HTTPException(status_code=500, detail=f"Errore interno del server AI: {str(e)}")
-
+        logging.error(f"Errore durante la gestione della chat WebSocket: {e}")
+        try:
+            await websocket.send_json({"error": f"Errore interno del server: {str(e)}"})
+        except Exception:
+            pass
 
 @app.post('/upload-audio')
 async def upload_audio(file: UploadFile = File(...), language: str = Form('italiano')):
@@ -119,7 +148,7 @@ async def upload_audio(file: UploadFile = File(...), language: str = Form('itali
         rec_dir = os.path.join(base_dir, 'recordings')
         os.makedirs(rec_dir, exist_ok=True)
 
-        filename = f"voice-{int(__import__('time').time()*1000)}-{file.filename}"
+        filename = f"voice-{int(__import__('time').time() * 1000)}-{file.filename}"
         safe_path = os.path.join(rec_dir, filename)
 
         # Salva il file
@@ -169,7 +198,8 @@ async def upload_audio(file: UploadFile = File(...), language: str = Form('itali
 
                         headers = {'Authorization': f'Bearer {openai_key}'}
                         logging.info(f"Sending file {audio_to_send} to Whisper for transcription")
-                        resp = await client.post('https://api.openai.com/v1/audio/transcriptions', headers=headers, data=data, files=files)
+                        resp = await client.post('https://api.openai.com/v1/audio/transcriptions', headers=headers,
+                                                 data=data, files=files)
                         if resp.status_code == 200:
                             j = resp.json()
                             transcription = j.get('text')
