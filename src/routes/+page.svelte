@@ -3,7 +3,6 @@
   import { apiStore } from "../store.js";
   import { get } from "svelte/store";
 
-  // Lingua (it | en)
   let language = 'it';
 
   // --- cartella dei messaggi ---
@@ -17,48 +16,42 @@
     },
   ];
   let nuovoMessaggio = "";
-  let isLoading = false; // l'AI sta pensando
-  let isRecording = false; // registrazione audio in corso
+  let isLoading = false;
+  let isRecording = false;
   let mediaRecorder = null;
   let mediaStream = null;
   let chunks = [];
-
-  // Riferimento al contenitore della chat per lo scroll
+  
+  // Riferimento al contenitore
   let chatContainer;
 
   async function inviaMessaggio() {
     if (nuovoMessaggio.trim() === "" || isLoading) return;
 
-    // 1. Aggiunge messaggio utente
     messaggi = [...messaggi, { testo: nuovoMessaggio, mittente: "Io" }];
-
-    // Pulisce input
     const inputText = nuovoMessaggio;
     nuovoMessaggio = "";
     isLoading = true;
 
-    // Scorri in basso dopo aver aggiunto il messaggio utente
     await tick();
     scrollToBottom();
 
-    // 2. Chiama l'AI
     try {
-      // Nota: passiamo 'messaggi' che contiene già il nuovo msg utente e la lingua corrente
-      await apiStore.fetchData(messaggi, language);
+      // fetchData ora invia via WS e ritorna una Promise che si risolve alla risposta
+      const response = await apiStore.fetchData(messaggi, language);
 
-      // 3. QUI AVVIENE LA MAGIA: Leggiamo la risposta dallo store
-      const storeState = get(apiStore);
+      // La risposta dal backend WS è assumibilmente un oggetto (es. { response: "..." } o simile)
+      // Adattiamo in base a cosa ritorna il tuo backend. 
+      // Se il backend WS ritorna la stessa struttura del JSON REST:
+      const rispostaTesto = response?.response || response?.text || JSON.stringify(response);
 
-      if (storeState.data) {
-        // Aggiungiamo la risposta AI alla lista locale
-        messaggi = [...messaggi, { testo: storeState.data, mittente: "AI" }];
-      }
+      messaggi = [...messaggi, { testo: rispostaTesto, mittente: "AI" }];
+      
     } catch (err) {
       console.error(err);
-      messaggi = [
-        ...messaggi,
-        { testo: language === 'en' ? "Connection error with the AI." : "Errore di connessione con l'AI.", mittente: "AI" },
-      ];
+      // Gestione visiva errore
+      const errorMsg = language === 'en' ? "Connection error." : "Errore di connessione.";
+      messaggi = [...messaggi, { testo: errorMsg, mittente: "AI" }];
     } finally {
       isLoading = false;
       await tick();
@@ -81,41 +74,60 @@
         const blob = new Blob(chunks, { type: chunks[0]?.type || 'audio/webm' });
         const file = new File([blob], `voice-${Date.now()}.webm`, { type: blob.type });
 
-        // Indica che stiamo inviando
         isLoading = true;
         try {
+          // Chiamata via WebSocket
           const res = await apiStore.uploadAudio(file, language);
 
-          // Aggiungi un messaggio utente rappresentando il file o trascrizione
+          // Gestione risposta
+          // Assumiamo che il backend ritorni { transcription: "...", response: "..." } 
+          // o simile a prima.
+          
+          let testoDaMostrare = "";
+
+          // Caso 1: C'è una trascrizione
           if (res && res.transcription) {
-            messaggi = [...messaggi, { testo: res.transcription, mittente: 'Io' }];
-            // Dopo aver aggiunto il testo trascritto chiamiamo l'AI
+            testoDaMostrare = res.transcription;
+            messaggi = [...messaggi, { testo: testoDaMostrare, mittente: 'Io' }];
             await tick();
-            await apiStore.fetchData(messaggi, language);
-            const storeState = get(apiStore);
-            if (storeState.data) {
-              messaggi = [...messaggi, { testo: storeState.data, mittente: 'AI' }];
+            
+            // Se il backend non ha già risposto alla chat nella stessa chiamata WS,
+            // potremmo dover chiamare fetchData. 
+            // Ma spesso gli endpoint audio unificati fanno tutto.
+            // Qui assumiamo che 'res' contenga già la risposta AI o che sia necessario 
+            // invocare la chat. 
+            // Se il backend WS risponde solo con la trascrizione:
+            // await apiStore.fetchData([...messaggi, {testo: testoDaMostrare, mittente: "Io"}], language);
+            
+            // Se il backend risponde con tutto (trascrizione + risposta AI):
+            if (res.response) {
+               messaggi = [...messaggi, { testo: res.response, mittente: 'AI' }];
             }
-          } else if (res && res.filename) {
-            // Aggiungiamo il messaggio con riferimento al file audio
-            const placeholder = `[Audio file: ${res.filename}]`;
+          } 
+          // Caso 2: Solo conferma file
+          else if (res && (res.filename || res.status === 'ok')) {
+            const placeholder = `[Audio file: ${res.filename || 'sent'}]`;
             messaggi = [...messaggi, { testo: placeholder, audio: res.filename, mittente: 'Io' }];
             await tick();
-            // Inoltriamo comunque il riferimento all'AI (il backend può gestirlo)
-            await apiStore.fetchData(messaggi, language);
-            const storeState = get(apiStore);
-            if (storeState.data) {
-              messaggi = [...messaggi, { testo: storeState.data, mittente: 'AI' }];
+            // Potenziale chiamata all'AI se il backend non l'ha fatto
+            // await apiStore.fetchData(messaggi, language);
+            // ... gestione risposta AI ...
+            if (res.response) {
+               messaggi = [...messaggi, { testo: res.response, mittente: 'AI' }];
             }
           } else {
-            messaggi = [...messaggi, { testo: language === 'en' ? 'Audio uploaded.' : 'Audio inviato.', mittente: 'Io' }];
+            // Fallback generico se la struttura è diversa
+            messaggi = [...messaggi, { testo: language === 'en' ? 'Audio sent.' : 'Audio inviato.', mittente: 'Io' }];
+             if (res && res.response) {
+               messaggi = [...messaggi, { testo: res.response, mittente: 'AI' }];
+            }
           }
+
         } catch (err) {
           console.error(err);
-          messaggi = [...messaggi, { testo: language === 'en' ? 'Audio upload failed.' : 'Invio audio fallito.', mittente: 'AI' }];
+          messaggi = [...messaggi, { testo: language === 'en' ? 'Audio error.' : 'Errore audio.', mittente: 'AI' }];
         } finally {
           isLoading = false;
-          // stop tracks
           if (mediaStream) {
             mediaStream.getTracks().forEach(t => t.stop());
             mediaStream = null;
@@ -146,12 +158,10 @@
     }
   }
 
-  // Ogni volta che i messaggi cambiano, scorri in basso
   afterUpdate(() => {
     scrollToBottom();
   });
 
-  // Settings dropdown
   let showMenu = false;
   let showLangOptions = false;
 
@@ -160,7 +170,6 @@
   }
 
   function selectLanguage() {
-    // Toggle inline language choices
     showLangOptions = !showLangOptions;
   }
 
@@ -168,22 +177,18 @@
     language = l;
     showLangOptions = false;
     showMenu = false;
-    // Inform the user in the selected language
     const confirmation = l === 'en' ? 'Language set to English.' : 'Lingua impostata su Italiano.';
     messaggi = [...messaggi, { testo: confirmation, mittente: 'AI' }];
   }
 
   function selectTemplate() {
     showMenu = false;
-    // placeholder action
     console.log("Template clicked");
   }
 
-  // Gestione tasti Enter per registrazione "hold-to-record"
   onMount(() => {
     function down(e) {
       if (e.key === 'Enter') {
-        // Previeni l'invio normale del form quando iniziamo a registrare
         e.preventDefault();
         if (!isRecording && !isLoading) startRecording();
       }
@@ -205,11 +210,9 @@
     };
   });
 
-  // Riproduci un file audio salvato sul server
   function playAudio(filename) {
     try {
       const backend = import.meta.env.VITE_BACKEND || '';
-      // If backend is empty, assume same origin
       const url = backend ? `${backend.replace(/\/$/, '')}/recordings/${filename}` : `/recordings/${filename}`;
       const audio = new Audio(url);
       audio.play().catch(err => console.error('Audio play failed', err));
@@ -235,7 +238,6 @@
     {/each}
   </div>
 
-  <!-- Indicatore "Sta scrivendo..." -->
   {#if isLoading}
     <div class="typing">{language === 'en' ? "Assistant is typing..." : "L'assistente sta scrivendo..."}</div>
   {/if}
@@ -280,7 +282,6 @@
       bind:value={nuovoMessaggio}
       disabled={isLoading}
     />
-    <!-- Pulsante registrazione accanto alla barra di input -->
     <button
       type="button"
       class="record-button"
@@ -294,14 +295,12 @@
       ⏺
     </button>
 
-    <!-- Icona invio (simulata con + o >) -->
     <button type="submit" disabled={isLoading || !nuovoMessaggio.trim()}>
       ➤
     </button>
   </form>
 </main>
 
-<!-- STILE -->
 <style>
   :global(body) {
     margin: 0;
@@ -321,7 +320,7 @@
     background-color: #efeae2;
     display: flex;
     flex-direction: column;
-    position: relative; /* Utile se volessi mettere un'animazione di scrittura */
+    position: relative;
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
   }
 
@@ -332,7 +331,6 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
-    /* Sfondo WhatsApp pattern (se l'immagine non carica usa un colore fallback) */
     background-color: #efeae2;
     background-image: url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png");
     background-blend-mode: overlay;
@@ -347,8 +345,6 @@
     position: relative;
     word-wrap: break-word;
     box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
-
-    /* IMPORTANTE: Rispetta i ritorni a capo (\n) */
     white-space: pre-wrap;
   }
 
@@ -377,7 +373,7 @@
     flex: 1;
     padding: 12px 15px;
     border-radius: 20px;
-    border: none; /* Più stile WhatsApp */
+    border: none;
     outline: none;
     background-color: #ffffff;
   }
@@ -433,7 +429,6 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    /* indent the language choices so they appear further to the right */
     padding-left: 20px;
   }
 
@@ -441,7 +436,6 @@
     background-color: #008069;
     color: white;
     border: none;
-    /* Crea un cerchio per il bottone invio */
     width: 45px;
     height: 45px;
     border-radius: 50%;
@@ -462,9 +456,8 @@
     cursor: not-allowed;
   }
 
-  /* Style for the record button next to input */
   .record-button {
-    background-color: #b91c1c; /* red */
+    background-color: #b91c1c;
     color: white;
     border: none;
     width: 40px;
@@ -479,13 +472,12 @@
 
   .record-button:active { transform: scale(0.96); }
 
-  /* Indicatore di caricamento */
   .typing {
     font-size: 12px;
     color: #666;
     margin-left: 20px;
     margin-bottom: 5px;
     font-style: italic;
-    height: 15px; /* Previene salti di layout */
+    height: 15px;
   }
 </style>
