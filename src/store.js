@@ -1,4 +1,5 @@
 import { writable } from 'svelte/store';
+import { browser } from '$app/environment';
 
 // Funzione helper per ottenere l'URL WebSocket corretto
 const getWsUrl = () => {
@@ -22,12 +23,15 @@ const createApiStore = () => {
 
   // Funzione di connessione
   const connect = () => {
+    // Controllo di sicurezza aggiuntivo
+    if (!browser) return;
+
     if (socket && (socket.readyState === WebSocket.CONNECTING || socket.readyState === WebSocket.OPEN)) {
       return;
     }
 
     console.log("Tentativo di connessione WebSocket...");
-    
+
     try {
       socket = new WebSocket(getWsUrl());
 
@@ -41,16 +45,18 @@ const createApiStore = () => {
       socket.onclose = (event) => {
         console.log("WebSocket Disconnesso. Riconnessione tra 3 secondi...");
         update(s => ({ ...s, connected: false, loading: false }));
-        
-        // Riconnessione automatica ogni 3 secondi
+
         if (reconnectTimer) clearTimeout(reconnectTimer);
-        reconnectTimer = setTimeout(connect, 3000);
+        // Riconnetti solo se siamo ancora nel browser (es. se l'utente non ha chiuso la pagina)
+        if (browser) {
+            reconnectTimer = setTimeout(connect, 3000);
+        }
       };
 
       socket.onerror = (error) => {
         console.error("WebSocket Error:", error);
         update(s => ({ ...s, error: "Errore di connessione WebSocket", connected: false }));
-        socket.close(); // Chiude per triggerare onclose e la riconnessione
+        socket.close(); // Chiude per forzare onclose e la riconnessione
       };
 
       socket.onmessage = (event) => {
@@ -74,12 +80,16 @@ const createApiStore = () => {
       console.error("Impossibile creare WebSocket", e);
       // Fallback o riprova
       if (reconnectTimer) clearTimeout(reconnectTimer);
-      reconnectTimer = setTimeout(connect, 3000);
+      if (browser) {
+          reconnectTimer = setTimeout(connect, 3000);
+      }
     }
   };
 
-  // Avvia la connessione iniziale
-  connect();
+  // Avvia la connessione SOLO se siamo nel browser
+  if (browser) {
+    connect();
+  }
 
   return {
     subscribe,
@@ -88,9 +98,6 @@ const createApiStore = () => {
     fetchData: async (messaggi, language = 'it') => {
       // Se non connesso, segnaliamo errore o attendiamo (qui segnaliamo errore per immediatezza)
       if (!socket || socket.readyState !== WebSocket.OPEN) {
-        // Opzionale: potremmo aspettare che la connessione sia pronta, 
-        // ma per semplicità lanciamo un errore che l'UI può gestire.
-        // Nota: La riconnessione automatica è già attiva in background.
         throw new Error("WebSocket non connesso. Riprova tra qualche istante.");
       }
 
@@ -105,7 +112,7 @@ const createApiStore = () => {
       const languageName = language === 'en' ? 'English' : (language === 'it' ? 'Italiano' : language);
 
       const payload = {
-        type: 'chat', // Identificativo per il backend
+        type: 'chat',
         messages: messages,
         language: languageName
       };
@@ -132,13 +139,13 @@ const createApiStore = () => {
 
       // Leggiamo il file come DataURL (Base64)
       const reader = new FileReader();
-      
+
       return new Promise((resolve, reject) => {
         reader.onload = () => {
           const base64Audio = reader.result; // "data:audio/webm;base64,......"
           
           const payload = {
-            type: 'audio', // Identificativo per il backend
+            type: 'audio',
             content: base64Audio,
             filename: file.name || `voice-${Date.now()}.webm`,
             language: language
