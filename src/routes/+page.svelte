@@ -37,19 +37,12 @@
     scrollToBottom();
 
     try {
-      // fetchData ora invia via WS e ritorna una Promise che si risolve alla risposta
       const response = await apiStore.fetchData(messaggi, language);
-
-      // La risposta dal backend WS è assumibilmente un oggetto (es. { response: "..." } o simile)
-      // Adattiamo in base a cosa ritorna il tuo backend. 
-      // Se il backend WS ritorna la stessa struttura del JSON REST:
       const rispostaTesto = response?.response || response?.text || JSON.stringify(response);
-
       messaggi = [...messaggi, { testo: rispostaTesto, mittente: "AI" }];
       
     } catch (err) {
       console.error(err);
-      // Gestione visiva errore
       const errorMsg = language === 'en' ? "Connection error." : "Errore di connessione.";
       messaggi = [...messaggi, { testo: errorMsg, mittente: "AI" }];
     } finally {
@@ -60,7 +53,7 @@
   }
 
   async function startRecording() {
-    if (isRecording) return;
+    if (isRecording || isLoading) return;
     try {
       mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaRecorder = new MediaRecorder(mediaStream);
@@ -72,52 +65,43 @@
 
       mediaRecorder.onstop = async () => {
         const blob = new Blob(chunks, { type: chunks[0]?.type || 'audio/webm' });
+        
+        // Creiamo un URL locale temporaneo per riascoltare subito l'audio senza aspettare il server
+        const localAudioUrl = URL.createObjectURL(blob);
+        
         const file = new File([blob], `voice-${Date.now()}.webm`, { type: blob.type });
 
         isLoading = true;
         try {
-          // Chiamata via WebSocket
           const res = await apiStore.uploadAudio(file, language);
 
-          // Gestione risposta
-          // Assumiamo che il backend ritorni { transcription: "...", response: "..." } 
-          // o simile a prima.
-          
           let testoDaMostrare = "";
 
           // Caso 1: C'è una trascrizione
           if (res && res.transcription) {
             testoDaMostrare = res.transcription;
-            messaggi = [...messaggi, { testo: testoDaMostrare, mittente: 'Io' }];
+            // Aggiungiamo il messaggio con TESTO + AUDIO LOCALE
+            messaggi = [...messaggi, { testo: testoDaMostrare, audio: localAudioUrl, mittente: 'Io' }];
             await tick();
             
-            // Se il backend non ha già risposto alla chat nella stessa chiamata WS,
-            // potremmo dover chiamare fetchData. 
-            // Ma spesso gli endpoint audio unificati fanno tutto.
-            // Qui assumiamo che 'res' contenga già la risposta AI o che sia necessario 
-            // invocare la chat. 
-            // Se il backend WS risponde solo con la trascrizione:
-            // await apiStore.fetchData([...messaggi, {testo: testoDaMostrare, mittente: "Io"}], language);
-            
-            // Se il backend risponde con tutto (trascrizione + risposta AI):
             if (res.response) {
                messaggi = [...messaggi, { testo: res.response, mittente: 'AI' }];
             }
           } 
-          // Caso 2: Solo conferma file
+          // Caso 2: Solo conferma file (nessuna trascrizione testuale)
           else if (res && (res.filename || res.status === 'ok')) {
-            const placeholder = `[Audio file: ${res.filename || 'sent'}]`;
-            messaggi = [...messaggi, { testo: placeholder, audio: res.filename, mittente: 'Io' }];
+            // Se non c'è testo, mostriamo un placeholder, ma manteniamo l'audio
+            const placeholder = language === 'en' ? 'Voice Message' : 'Messaggio vocale';
+            messaggi = [...messaggi, { testo: placeholder, audio: localAudioUrl, mittente: 'Io' }];
             await tick();
-            // Potenziale chiamata all'AI se il backend non l'ha fatto
-            // await apiStore.fetchData(messaggi, language);
-            // ... gestione risposta AI ...
+            
             if (res.response) {
                messaggi = [...messaggi, { testo: res.response, mittente: 'AI' }];
             }
           } else {
-            // Fallback generico se la struttura è diversa
-            messaggi = [...messaggi, { testo: language === 'en' ? 'Audio sent.' : 'Audio inviato.', mittente: 'Io' }];
+            // Fallback
+            const fallbackText = language === 'en' ? 'Audio sent.' : 'Audio inviato.';
+            messaggi = [...messaggi, { testo: fallbackText, audio: localAudioUrl, mittente: 'Io' }];
              if (res && res.response) {
                messaggi = [...messaggi, { testo: res.response, mittente: 'AI' }];
             }
@@ -149,6 +133,41 @@
       if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
     } catch (e) {
       console.error(e);
+    }
+  }
+
+  // Funzione aggiornata per gestire sia URL locali (blob) che file dal server
+  function playAudio(source) {
+    try {
+      let url = source;
+      // Se la source non è un URL completo (blob:http... o https...), assumiamo sia un filename del backend
+      if (!source.startsWith('blob:') && !source.startsWith('http')) {
+         const backend = import.meta.env.VITE_BACKEND || '';
+         url = backend ? `${backend.replace(/\/$/, '')}/recordings/${source}` : `/recordings/${source}`;
+      }
+      const audio = new Audio(url);
+      audio.play().catch(err => console.error('Audio play failed', err));
+    } catch (e) {
+      console.error('playAudio error', e);
+    }
+  }
+
+  function handleButtonClick() {
+    if (nuovoMessaggio.trim()) {
+      inviaMessaggio();
+    }
+  }
+
+  function handleButtonPress(e) {
+    if (!nuovoMessaggio.trim() && !isLoading) {
+      if(e.cancelable) e.preventDefault(); 
+      startRecording();
+    }
+  }
+
+  function handleButtonRelease() {
+    if (isRecording) {
+      stopRecording();
     }
   }
 
@@ -190,14 +209,20 @@
     function down(e) {
       if (e.key === 'Enter') {
         e.preventDefault();
-        if (!isRecording && !isLoading) startRecording();
+        if (!nuovoMessaggio.trim() && !isRecording && !isLoading) {
+          startRecording();
+        }
       }
     }
 
     function up(e) {
       if (e.key === 'Enter') {
         e.preventDefault();
-        if (isRecording) stopRecording();
+        if (isRecording) {
+          stopRecording();
+        } else if (nuovoMessaggio.trim()) {
+          inviaMessaggio();
+        }
       }
     }
 
@@ -209,17 +234,6 @@
       window.removeEventListener('keyup', up);
     };
   });
-
-  function playAudio(filename) {
-    try {
-      const backend = import.meta.env.VITE_BACKEND || '';
-      const url = backend ? `${backend.replace(/\/$/, '')}/recordings/${filename}` : `/recordings/${filename}`;
-      const audio = new Audio(url);
-      audio.play().catch(err => console.error('Audio play failed', err));
-    } catch (e) {
-      console.error('playAudio error', e);
-    }
-  }
 </script>
 
 <!-- STRUTTURA -->
@@ -227,13 +241,25 @@
   <div class="chat-container" bind:this={chatContainer}>
     {#each messaggi as msg}
       <div class="bolla {msg.mittente === 'Io' ? 'io' : 'ai'}">
-        {#if msg.audio}
-          <button type="button" class="play-audio" on:click={() => playAudio(msg.audio)} aria-label="Play audio">
-            ▶️
-          </button>
-        {:else}
-          {msg.testo}
+        
+        <!-- Contenuto Testo -->
+        {#if msg.testo}
+          <div class="msg-text">{msg.testo}</div>
         {/if}
+
+        <!-- Pulsante Riascolta (Solo se c'è audio allegato) -->
+        {#if msg.audio}
+          <button 
+            type="button" 
+            class="play-audio-btn" 
+            on:click={() => playAudio(msg.audio)} 
+            aria-label="Play audio"
+          >
+            <span class="icon">▶️</span>
+            <span class="label">{msg.mittente === 'Io' ? (language === 'en' ? 'Play Voice' : 'Riascolta') : '▶️'}</span>
+          </button>
+        {/if}
+        
       </div>
     {/each}
   </div>
@@ -242,7 +268,7 @@
     <div class="typing">{language === 'en' ? "Assistant is typing..." : "L'assistente sta scrivendo..."}</div>
   {/if}
 
-  <form on:submit|preventDefault={inviaMessaggio}>
+  <form on:submit|preventDefault>
     <div class="settings-container" on:click|stopPropagation>
       <button
         type="button"
@@ -276,28 +302,44 @@
         </div>
       {/if}
     </div>
+
     <input
       type="text"
       placeholder={language === 'en' ? 'Write a message...' : 'Scrivi un messaggio...'}
       bind:value={nuovoMessaggio}
       disabled={isLoading}
     />
+
+    <!-- PULSANTE UNIFICATO -->
     <button
       type="button"
-      class="record-button"
-      aria-label="Hold to record"
-      on:mousedown|preventDefault={startRecording}
-      on:mouseup|preventDefault={stopRecording}
-      on:mouseleave|preventDefault={stopRecording}
-      on:touchstart|preventDefault={startRecording}
-      on:touchend|preventDefault={stopRecording}
+      class="hybrid-button {nuovoMessaggio.trim() ? 'has-text' : 'is-mic'}"
+      disabled={isLoading}
+      on:click={handleButtonClick}
+      on:mousedown={handleButtonPress}
+      on:touchstart={handleButtonPress}
+      on:mouseup={handleButtonRelease}
+      on:touchend={handleButtonRelease}
+      on:mouseleave={handleButtonRelease}
+      aria-label={nuovoMessaggio.trim() ? "Send message" : "Hold to record"}
     >
-      ⏺
+      {#if nuovoMessaggio.trim()}
+        <!-- Icona Play / Invio -->
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"></line>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+        </svg>
+      {:else}
+        <!-- Icona Microfono -->
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+          <line x1="12" y1="19" x2="12" y2="23"></line>
+          <line x1="8" y1="23" x2="16" y2="23"></line>
+        </svg>
+      {/if}
     </button>
 
-    <button type="submit" disabled={isLoading || !nuovoMessaggio.trim()}>
-      ➤
-    </button>
   </form>
 </main>
 
@@ -346,6 +388,9 @@
     word-wrap: break-word;
     box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
     white-space: pre-wrap;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
   }
 
   .bolla.io {
@@ -358,6 +403,40 @@
     background-color: #ffffff;
     align-self: flex-start;
     border-top-left-radius: 0;
+  }
+
+  /* Stile per il testo all'interno della bolla */
+  .msg-text {
+    /* Stile standard per il testo */
+  }
+
+  /* Stile per il nuovo pulsante di riproduzione dentro la bolla */
+  .play-audio-btn {
+    background: rgba(0, 0, 0, 0.05);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 20px;
+    padding: 5px 12px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #075e54;
+    align-self: flex-start;
+    transition: background 0.2s;
+    width: fit-content;
+  }
+
+  .play-audio-btn:hover {
+    background: rgba(0, 0, 0, 0.1);
+  }
+
+  .play-audio-btn .icon {
+    font-size: 12px;
+  }
+
+  .bolla.ai .play-audio-btn {
+    color: #008069;
   }
 
   form {
@@ -395,6 +474,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    color: #54656f;
   }
 
   .settings-menu {
@@ -419,6 +499,7 @@
     text-align: center;
     cursor: pointer;
     border-radius: 6px;
+    color: #333;
   }
 
   .menu-item:hover {
@@ -432,45 +513,40 @@
     padding-left: 20px;
   }
 
-  button {
-    background-color: #008069;
-    color: white;
-    border: none;
+  .hybrid-button {
     width: 45px;
     height: 45px;
     border-radius: 50%;
+    border: none;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 18px;
-    transition: transform 0.1s;
+    transition: transform 0.1s, background-color 0.2s;
+    color: white;
   }
 
-  button:active {
+  .hybrid-button:active {
     transform: scale(0.95);
   }
 
-  button:disabled {
+  .hybrid-button:disabled {
     background-color: #ccc;
     cursor: not-allowed;
+    opacity: 0.7;
   }
 
-  .record-button {
+  .hybrid-button.is-mic {
+    background-color: #54656f;
+  }
+  .hybrid-button.is-mic:active {
     background-color: #b91c1c;
-    color: white;
-    border: none;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 16px;
+    transform: scale(1.1);
   }
 
-  .record-button:active { transform: scale(0.96); }
+  .hybrid-button.has-text {
+    background-color: #008069;
+  }
 
   .typing {
     font-size: 12px;
