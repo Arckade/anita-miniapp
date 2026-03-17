@@ -56,8 +56,11 @@ class Message(BaseModel):
 
 # 2. Aggiorniamo ChatRequest per includere la lingua (opzionale con default)
 class ChatRequest(BaseModel):
-    messages: List[Message]
+    messages: List[Message] = []
     language: str = "italiano"  # Default se non specificato
+    type: str = None
+    content: str = None
+    filename: str = None
 
 
 # --- Rotte ---
@@ -83,8 +86,8 @@ async def chat(websocket: WebSocket):
                 await websocket.send_json({"error": f"Errore di validazione: {str(e)}"})
                 continue  # Modificato da 'return' a 'continue'
 
-            if not request.messages:
-                await websocket.send_json({"error": "Nessun messaggio fornito"})
+            if not request.messages and not request.content:
+                await websocket.send_json({"error": "Nessun messaggio o contenuto fornito"})
                 continue  # Modificato da 'return' a 'continue'
 
             # Preparazione messaggi cronologico (history)

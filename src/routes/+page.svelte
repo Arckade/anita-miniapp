@@ -1,7 +1,9 @@
 <script>
-  import { tick, afterUpdate, onMount } from "svelte";
-  import { apiStore } from "../store.js";
-  import { get } from "svelte/store";
+  import { tick, afterUpdate } from "svelte";
+  import { apiStore, getAudioUrl } from "$lib";
+  import ChatMessage from "$lib/components/ChatMessage.svelte";
+  import ChatInput from "$lib/components/ChatInput.svelte";
+  import SettingsMenu from "$lib/components/SettingsMenu.svelte";
 
   let language = 'it';
 
@@ -15,7 +17,7 @@
       mittente: "AI",
     },
   ];
-  let nuovoMessaggio = "";
+  
   let isLoading = false;
   let isRecording = false;
   let mediaRecorder = null;
@@ -25,12 +27,10 @@
   // Riferimento al contenitore
   let chatContainer;
 
-  async function inviaMessaggio() {
-    if (nuovoMessaggio.trim() === "" || isLoading) return;
+  async function inviaMessaggio(nuovoMessaggio) {
+    if (!nuovoMessaggio || isLoading) return;
 
     messaggi = [...messaggi, { testo: nuovoMessaggio, mittente: "Io" }];
-    const inputText = nuovoMessaggio;
-    nuovoMessaggio = "";
     isLoading = true;
 
     await tick();
@@ -66,7 +66,7 @@
       mediaRecorder.onstop = async () => {
         const blob = new Blob(chunks, { type: chunks[0]?.type || 'audio/webm' });
         
-        // Creiamo un URL locale temporaneo per riascoltare subito l'audio senza aspettare il server
+        // Creiamo un URL locale temporaneo per riascoltare subito l'audio
         const localAudioUrl = URL.createObjectURL(blob);
         
         const file = new File([blob], `voice-${Date.now()}.webm`, { type: blob.type });
@@ -75,36 +75,14 @@
         try {
           const res = await apiStore.uploadAudio(file, language);
 
-          let testoDaMostrare = "";
-
-          // Caso 1: C'è una trascrizione
-          if (res && res.transcription) {
-            testoDaMostrare = res.transcription;
-            // Aggiungiamo il messaggio con TESTO + AUDIO LOCALE
-            messaggi = [...messaggi, { testo: testoDaMostrare, audio: localAudioUrl, mittente: 'Io' }];
-            await tick();
-            
-            if (res.response) {
-               messaggi = [...messaggi, { testo: res.response, mittente: 'AI' }];
-            }
-          } 
-          // Caso 2: Solo conferma file (nessuna trascrizione testuale)
-          else if (res && (res.filename || res.status === 'ok')) {
-            // Se non c'è testo, mostriamo un placeholder, ma manteniamo l'audio
-            const placeholder = language === 'en' ? 'Voice Message' : 'Messaggio vocale';
-            messaggi = [...messaggi, { testo: placeholder, audio: localAudioUrl, mittente: 'Io' }];
-            await tick();
-            
-            if (res.response) {
-               messaggi = [...messaggi, { testo: res.response, mittente: 'AI' }];
-            }
-          } else {
-            // Fallback
-            const fallbackText = language === 'en' ? 'Audio sent.' : 'Audio inviato.';
-            messaggi = [...messaggi, { testo: fallbackText, audio: localAudioUrl, mittente: 'Io' }];
-             if (res && res.response) {
-               messaggi = [...messaggi, { testo: res.response, mittente: 'AI' }];
-            }
+          // MODIFICA QUI: Inseriamo il messaggio con TESTO VUOTO per mostrare solo il pulsante audio
+          // Non importa se c'è una trascrizione dal backend, la nascondiamo
+          messaggi = [...messaggi, { testo: "", audio: localAudioUrl, mittente: 'Io' }];
+          await tick();
+          
+          // Gestiamo la risposta AI se presente
+          if (res && res.response) {
+             messaggi = [...messaggi, { testo: res.response, mittente: 'AI' }];
           }
 
         } catch (err) {
@@ -136,38 +114,13 @@
     }
   }
 
-  // Funzione aggiornata per gestire sia URL locali (blob) che file dal server
   function playAudio(source) {
     try {
-      let url = source;
-      // Se la source non è un URL completo (blob:http... o https...), assumiamo sia un filename del backend
-      if (!source.startsWith('blob:') && !source.startsWith('http')) {
-         const backend = import.meta.env.VITE_BACKEND || '';
-         url = backend ? `${backend.replace(/\/$/, '')}/recordings/${source}` : `/recordings/${source}`;
-      }
+      const url = getAudioUrl(source);
       const audio = new Audio(url);
       audio.play().catch(err => console.error('Audio play failed', err));
     } catch (e) {
       console.error('playAudio error', e);
-    }
-  }
-
-  function handleButtonClick() {
-    if (nuovoMessaggio.trim()) {
-      inviaMessaggio();
-    }
-  }
-
-  function handleButtonPress(e) {
-    if (!nuovoMessaggio.trim() && !isLoading) {
-      if(e.cancelable) e.preventDefault(); 
-      startRecording();
-    }
-  }
-
-  function handleButtonRelease() {
-    if (isRecording) {
-      stopRecording();
     }
   }
 
@@ -181,86 +134,19 @@
     scrollToBottom();
   });
 
-  let showMenu = false;
-  let showLangOptions = false;
-
-  function toggleMenu(event) {
-    showMenu = !showMenu;
-  }
-
-  function selectLanguage() {
-    showLangOptions = !showLangOptions;
-  }
-
-  function setLanguage(l) {
+  function setLanguage(event) {
+    const l = event.detail;
     language = l;
-    showLangOptions = false;
-    showMenu = false;
     const confirmation = l === 'en' ? 'Language set to English.' : 'Lingua impostata su Italiano.';
-    messaggi = [...messaggi, { testo: confirmation, mittente: 'AI' }];
+    messaggi = [...messaggi, { testo: confirmation, mittente: "AI" }];
   }
-
-  function selectTemplate() {
-    showMenu = false;
-    console.log("Template clicked");
-  }
-
-  onMount(() => {
-    function down(e) {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        if (!nuovoMessaggio.trim() && !isRecording && !isLoading) {
-          startRecording();
-        }
-      }
-    }
-
-    function up(e) {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        if (isRecording) {
-          stopRecording();
-        } else if (nuovoMessaggio.trim()) {
-          inviaMessaggio();
-        }
-      }
-    }
-
-    window.addEventListener('keydown', down);
-    window.addEventListener('keyup', up);
-
-    return () => {
-      window.removeEventListener('keydown', down);
-      window.removeEventListener('keyup', up);
-    };
-  });
 </script>
 
 <!-- STRUTTURA -->
-<main on:click={() => { showMenu = false; showLangOptions = false }}>
+<main>
   <div class="chat-container" bind:this={chatContainer}>
     {#each messaggi as msg}
-      <div class="bolla {msg.mittente === 'Io' ? 'io' : 'ai'}">
-        
-        <!-- Contenuto Testo -->
-        {#if msg.testo}
-          <div class="msg-text">{msg.testo}</div>
-        {/if}
-
-        <!-- Pulsante Riascolta (Solo se c'è audio allegato) -->
-        {#if msg.audio}
-          <button 
-            type="button" 
-            class="play-audio-btn" 
-            on:click={() => playAudio(msg.audio)} 
-            aria-label="Play audio"
-          >
-            <span class="icon">▶️</span>
-            <span class="label">{msg.mittente === 'Io' ? (language === 'en' ? 'Play Voice' : 'Riascolta') : '▶️'}</span>
-          </button>
-        {/if}
-        
-      </div>
+      <ChatMessage {msg} {language} {playAudio} />
     {/each}
   </div>
 
@@ -268,79 +154,22 @@
     <div class="typing">{language === 'en' ? "Assistant is typing..." : "L'assistente sta scrivendo..."}</div>
   {/if}
 
-  <form on:submit|preventDefault>
-    <div class="settings-container" on:click|stopPropagation>
-      <button
-        type="button"
-        class="settings-button"
-        aria-label="Settings"
-        on:click={toggleMenu}
-      >
-        ⚙️
-      </button>
-
-      {#if showMenu}
-        <div class="settings-menu" on:click|stopPropagation>
-          <button type="button" class="menu-item" on:click={selectLanguage}>
-            {language === 'en' ? 'Language' : 'Lingua'}
-          </button>
-
-          {#if showLangOptions}
-            <div class="lang-options">
-              <button type="button" class="menu-item" on:click={() => setLanguage('it')}>
-                Italiano
-              </button>
-              <button type="button" class="menu-item" on:click={() => setLanguage('en')}>
-                English
-              </button>
-            </div>
-          {/if}
-
-          <button type="button" class="menu-item" on:click={selectTemplate}>
-            template
-          </button>
-        </div>
-      {/if}
+  <ChatInput 
+    {language} 
+    {isLoading} 
+    {isRecording}
+    on:sendMessage={(e) => inviaMessaggio(e.detail)}
+    on:startRecording={startRecording}
+    on:stopRecording={stopRecording}
+  >
+    <div slot="settings">
+      <SettingsMenu 
+        {language} 
+        on:setLanguage={setLanguage} 
+        on:selectTemplate={() => console.log('Template clicked')}
+      />
     </div>
-
-    <input
-      type="text"
-      placeholder={language === 'en' ? 'Write a message...' : 'Scrivi un messaggio...'}
-      bind:value={nuovoMessaggio}
-      disabled={isLoading}
-    />
-
-    <!-- PULSANTE UNIFICATO -->
-    <button
-      type="button"
-      class="hybrid-button {nuovoMessaggio.trim() ? 'has-text' : 'is-mic'}"
-      disabled={isLoading}
-      on:click={handleButtonClick}
-      on:mousedown={handleButtonPress}
-      on:touchstart={handleButtonPress}
-      on:mouseup={handleButtonRelease}
-      on:touchend={handleButtonRelease}
-      on:mouseleave={handleButtonRelease}
-      aria-label={nuovoMessaggio.trim() ? "Send message" : "Hold to record"}
-    >
-      {#if nuovoMessaggio.trim()}
-        <!-- Icona Play / Invio -->
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="22" y1="2" x2="11" y2="13"></line>
-          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-        </svg>
-      {:else}
-        <!-- Icona Microfono -->
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-          <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-          <line x1="12" y1="19" x2="12" y2="23"></line>
-          <line x1="8" y1="23" x2="16" y2="23"></line>
-        </svg>
-      {/if}
-    </button>
-
-  </form>
+  </ChatInput>
 </main>
 
 <style>
@@ -378,175 +207,6 @@
     background-blend-mode: overlay;
   }
 
-  .bolla {
-    padding: 10px 15px;
-    border-radius: 8px;
-    max-width: 75%;
-    font-size: 15px;
-    line-height: 1.4;
-    position: relative;
-    word-wrap: break-word;
-    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
-    white-space: pre-wrap;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .bolla.io {
-    background-color: #d9fdd3;
-    align-self: flex-end;
-    border-top-right-radius: 0;
-  }
-
-  .bolla.ai {
-    background-color: #ffffff;
-    align-self: flex-start;
-    border-top-left-radius: 0;
-  }
-
-  /* Stile per il testo all'interno della bolla */
-  .msg-text {
-    /* Stile standard per il testo */
-  }
-
-  /* Stile per il nuovo pulsante di riproduzione dentro la bolla */
-  .play-audio-btn {
-    background: rgba(0, 0, 0, 0.05);
-    border: 1px solid rgba(0, 0, 0, 0.1);
-    border-radius: 20px;
-    padding: 5px 12px;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 13px;
-    color: #075e54;
-    align-self: flex-start;
-    transition: background 0.2s;
-    width: fit-content;
-  }
-
-  .play-audio-btn:hover {
-    background: rgba(0, 0, 0, 0.1);
-  }
-
-  .play-audio-btn .icon {
-    font-size: 12px;
-  }
-
-  .bolla.ai .play-audio-btn {
-    color: #008069;
-  }
-
-  form {
-    padding: 10px;
-    background-color: #f0f2f5;
-    display: flex;
-    gap: 10px;
-    border-top: 1px solid #ddd;
-    align-items: center;
-  }
-
-  input {
-    flex: 1;
-    padding: 12px 15px;
-    border-radius: 20px;
-    border: none;
-    outline: none;
-    background-color: #ffffff;
-  }
-
-  .settings-container {
-    position: relative;
-    display: flex;
-    align-items: center;
-  }
-
-  .settings-button {
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    font-size: 18px;
-    margin-right: 6px;
-    width: 36px;
-    height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #54656f;
-  }
-
-  .settings-menu {
-    position: absolute;
-    bottom: 50px;
-    left: 0;
-    background: white;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
-    display: flex;
-    flex-direction: column;
-    padding: 6px;
-    min-width: 120px;
-    z-index: 30;
-  }
-
-  .menu-item {
-    background: transparent;
-    border: none;
-    padding: 8px 12px;
-    text-align: center;
-    cursor: pointer;
-    border-radius: 6px;
-    color: #333;
-  }
-
-  .menu-item:hover {
-    background: #f3f4f6;
-  }
-
-  .lang-options {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding-left: 20px;
-  }
-
-  .hybrid-button {
-    width: 45px;
-    height: 45px;
-    border-radius: 50%;
-    border: none;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: transform 0.1s, background-color 0.2s;
-    color: white;
-  }
-
-  .hybrid-button:active {
-    transform: scale(0.95);
-  }
-
-  .hybrid-button:disabled {
-    background-color: #ccc;
-    cursor: not-allowed;
-    opacity: 0.7;
-  }
-
-  .hybrid-button.is-mic {
-    background-color: #54656f;
-  }
-  .hybrid-button.is-mic:active {
-    background-color: #b91c1c;
-    transform: scale(1.1);
-  }
-
-  .hybrid-button.has-text {
-    background-color: #008069;
-  }
 
   .typing {
     font-size: 12px;
