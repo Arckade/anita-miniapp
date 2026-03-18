@@ -11,12 +11,12 @@ import subprocess
 from pathlib import Path
 import logging
 from google import genai
-from google.genai import types  # 1. Importa types per la configurazione
+from google.genai import types  # 1. Import types for configuration
 
-# Carica le variabili d'ambiente
+# Load environment variables
 load_dotenv()
 
-# Configura il Client
+# Configure the Client
 api_key = os.getenv("VITE_GEMINI_KEY") or os.getenv("GEMINI_API_KEY")
 
 # Optional OpenAI key for transcription (Whisper)
@@ -39,7 +39,7 @@ os.makedirs(RECORDINGS_DIR, exist_ok=True)
 # Mount recordings as static files at /recordings
 app.mount('/recordings', StaticFiles(directory=RECORDINGS_DIR), name='recordings')
 
-# --- Configurazione CORS ---
+# --- CORS Configuration ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -48,91 +48,94 @@ app.add_middleware(
 )
 
 
-# --- Modelli Dati ---
+# --- Data Models ---
 class Message(BaseModel):
     role: str
-    content: str
-
-
-# 2. Aggiorniamo ChatRequest per includere la lingua (opzionale con default)
-class ChatRequest(BaseModel):
-    messages: List[Message] = []
-    language: str = "italiano"  # Default se non specificato
-    type: str = None
     content: str = None
+    type: str = None
     filename: str = None
 
 
-# --- Rotte ---
+# 2. Update ChatRequest to include language (optional with default)
+class ChatRequest(BaseModel):
+    messages: List[Message] = []
+    language: str = "italiano"  # Default if not specified
+
+
+# --- Routes ---
 
 @app.websocket("/chat")
 async def chat(websocket: WebSocket):
     await websocket.accept()
     try:
-        # --- AGGIUNTO WHILE TRUE ---
+        # --- ADDED WHILE TRUE ---
         while True:
-            # 1. Ricezione del messaggio JSON dal client
-            # Questa istruzione mette in pausa l'esecuzione finché non arriva un messaggio
+            # 1. Receive JSON message from client
+            # This pauses execution until a message arrives
             data = await websocket.receive_text()
 
-            # 2. Parsing e validazione dei dati
+            # 2. Parsing and data validation
             try:
                 payload = json.loads(data)
                 request = ChatRequest(**payload)
             except ValueError as e:
                 await websocket.send_json({"error": f"JSON non valido: {str(e)}"})
-                continue  # Modificato da 'return' a 'continue' per non chiudere la connessione
+                continue  # Changed from 'return' to 'continue' to avoid closing the connection
             except Exception as e:
                 await websocket.send_json({"error": f"Errore di validazione: {str(e)}"})
-                continue  # Modificato da 'return' a 'continue'
+                continue  # Changed from 'return' to 'continue' to avoid closing the connection
 
             if not request.messages and not request.content:
                 await websocket.send_json({"error": "Nessun messaggio o contenuto fornito"})
-                continue  # Modificato da 'return' a 'continue'
+                continue  # Changed from 'return' to 'continue' to avoid closing the connection
 
-            # Preparazione messaggi cronologico (history)
+            # Prepare chronological messages (history)
             sdk_messages = []
             for msg in request.messages:
+                if msg.type == "audio":
+                    continue
                 sdk_messages.append({
                     "role": "user" if msg.role == "user" else "model",
                     "parts": [{"text": msg.content}]
                 })
+            if not sdk_messages:
+                continue
 
             if client is None:
                 await websocket.send_json({"error": "AI API key non configurata."})
                 return
 
-            # 3. Creiamo il System Prompt dinamico
+            # 3. Create the dynamic System Prompt
             system_instruction_text = (
                 f"Sei un assistente utile e professionale. "
                 f"Rispondi esclusivamente in {request.language}. "
                 f"Non usare altre lingue a meno che non sia strettamente necessario per tradurre termini tecnici."
             )
 
-            # 4. Configurazione del modello
+            # 4. Model configuration
             generate_content_config = types.GenerateContentConfig(
                 system_instruction=system_instruction_text,
             )
 
-            # 5. Chiamata all'API AI
-            # Qui usiamo await, ma la libreria google-genai potrebbe essere sincrona.
-            # Se ottieni un errore di "coroutine never awaited", rimuovi await qui.
+            # 5. Call the AI API
+            # Here we use await, but the google-genai library might be synchronous.
+            # If you get a "coroutine never awaited" error, remove await here.
             response = client.models.generate_content(
                 model='gemini-2.5-flash',
                 contents=sdk_messages,
                 config=generate_content_config
             )
 
-            # Estrazione risposta
+            # Extract response
             response_text = ""
             if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
                 response_text = response.candidates[0].content.parts[0].text
 
-            # 6. Invio della risposta
+            # 6. Send the response
             await websocket.send_json({"response": response_text})
 
-            # --- FINE CICLO ---
-            # Una volta arrivati qui, il ciclo ricomincia e aspetta il prossimo messaggio
+            # --- END OF LOOP ---
+            # Once here, the loop restarts and waits for the next message
 
     except WebSocketDisconnect:
         logging.info("Client disconnesso intenzionalmente")
@@ -146,7 +149,7 @@ async def chat(websocket: WebSocket):
 @app.post('/upload-audio')
 async def upload_audio(file: UploadFile = File(...), language: str = Form('italiano')):
     try:
-        # Cartella per salvare le registrazioni
+        # Folder to save recordings
         base_dir = os.path.dirname(__file__)
         rec_dir = os.path.join(base_dir, 'recordings')
         os.makedirs(rec_dir, exist_ok=True)
@@ -154,12 +157,24 @@ async def upload_audio(file: UploadFile = File(...), language: str = Form('itali
         filename = f"voice-{int(__import__('time').time() * 1000)}-{file.filename}"
         safe_path = os.path.join(rec_dir, filename)
 
-        # Salva il file
+        # Save the file
         with open(safe_path, 'wb') as f:
             content = await file.read()
             f.write(content)
 
-        # Prova a trascrivere usando OpenAI Whisper se la chiave è configurata
+        # Keep only a limited number of audio files
+        MAX_RECORDINGS = 3
+        existing = sorted(
+            [os.path.join(rec_dir, f) for f in os.listdir(rec_dir) if os.path.isfile(os.path.join(rec_dir, f))],
+            key=os.path.getmtime
+        )
+        for old_file in existing[:-MAX_RECORDINGS]:
+            try:
+                os.remove(old_file)
+            except Exception:
+                pass
+
+        # Try to transcribe using OpenAI Whisper if the key is configured
         transcription = None
         converted = False
         converted_path = None

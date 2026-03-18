@@ -7,7 +7,7 @@
 
   let language = 'it';
 
-  // --- cartella dei messaggi ---
+  // --- message list ---
   let messaggi = [
     {
       testo:
@@ -22,9 +22,8 @@
   let isRecording = false;
   let mediaRecorder = null;
   let mediaStream = null;
-  let chunks = [];
   
-  // Riferimento al contenitore
+  // Reference to the container
   let chatContainer;
 
   async function inviaMessaggio(nuovoMessaggio) {
@@ -55,32 +54,37 @@
   async function startRecording() {
     if (isRecording || isLoading) return;
     try {
-      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorder = new MediaRecorder(mediaStream);
-      chunks = [];
+      // Capture stream and recorder as local variables so the onstop closure
+      // always references the correct instances, even if a new recording starts
+      // before this one's onstop fires (prevents race condition on double-click).
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const localChunks = [];
 
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) chunks.push(e.data);
+      mediaStream = stream;
+      mediaRecorder = recorder;
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) localChunks.push(e.data);
       };
 
-      mediaRecorder.onstop = async () => {
-        const blob = new Blob(chunks, { type: chunks[0]?.type || 'audio/webm' });
-        
-        // Creiamo un URL locale temporaneo per riascoltare subito l'audio
+      recorder.onstop = async () => {
+        // Stop THIS recording's tracks via the closed-over local reference
+        stream.getTracks().forEach(t => t.stop());
+        if (mediaStream === stream) mediaStream = null;
+        if (mediaRecorder === recorder) mediaRecorder = null;
+
+        const blob = new Blob(localChunks, { type: localChunks[0]?.type || 'audio/webm' });
         const localAudioUrl = URL.createObjectURL(blob);
-        
         const file = new File([blob], `voice-${Date.now()}.webm`, { type: blob.type });
 
         isLoading = true;
         try {
           const res = await apiStore.uploadAudio(file, language);
 
-          // MODIFICA QUI: Inseriamo il messaggio con TESTO VUOTO per mostrare solo il pulsante audio
-          // Non importa se c'è una trascrizione dal backend, la nascondiamo
           messaggi = [...messaggi, { testo: "", audio: localAudioUrl, mittente: 'Io' }];
           await tick();
           
-          // Gestiamo la risposta AI se presente
           if (res && res.response) {
              messaggi = [...messaggi, { testo: res.response, mittente: 'AI' }];
           }
@@ -90,14 +94,12 @@
           messaggi = [...messaggi, { testo: language === 'en' ? 'Audio error.' : 'Errore audio.', mittente: 'AI' }];
         } finally {
           isLoading = false;
-          if (mediaStream) {
-            mediaStream.getTracks().forEach(t => t.stop());
-            mediaStream = null;
-          }
+          await tick();
+          scrollToBottom();
         }
       };
 
-      mediaRecorder.start();
+      recorder.start();
       isRecording = true;
     } catch (err) {
       console.error('Could not start recording', err);
