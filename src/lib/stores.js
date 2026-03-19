@@ -13,7 +13,8 @@ const createApiStore = () => {
 
   let socket = null;
   let reconnectTimer = null;
-  let messageResolver = null; // Promise resolver per la risposta attesa
+  let messageResolver = null;
+  let messageRejecter = null;
 
   // Funzione di connessione
   const connect = () => {
@@ -36,8 +37,14 @@ const createApiStore = () => {
       socket.onclose = (event) => {
         console.log("WebSocket Disconnesso. Riconnessione tra 3 secondi...");
         update(s => ({ ...s, connected: false, loading: false }));
-        
-        // Riconnessione automatica ogni 3 secondi
+
+        // Rigetta eventuali promise in attesa
+        if (messageRejecter) {
+          messageRejecter(new Error("WebSocket disconnesso durante la richiesta."));
+          messageResolver = null;
+          messageRejecter = null;
+        }
+
         if (reconnectTimer) clearTimeout(reconnectTimer);
         reconnectTimer = setTimeout(connect, 3000);
       };
@@ -45,6 +52,13 @@ const createApiStore = () => {
       socket.onerror = (error) => {
         console.error("WebSocket Error:", error);
         update(s => ({ ...s, error: "Errore di connessione WebSocket", connected: false }));
+
+        if (messageRejecter) {
+          messageRejecter(new Error("Errore WebSocket."));
+          messageResolver = null;
+          messageRejecter = null;
+        }
+
         socket.close(); // Chiude per triggerare onclose e la riconnessione
       };
 
@@ -55,10 +69,11 @@ const createApiStore = () => {
           // Aggiorna lo store con i dati ricevuti
           update(s => ({ ...s, data: data, loading: false }));
 
-          // Se c'è una promise in attesa di risposta (per await fetchData), la risolviamo
+          // Se c'è una promise in attesa di risposta, la risolviamo
           if (messageResolver) {
             messageResolver(data);
             messageResolver = null;
+            messageRejecter = null;
           }
         } catch (e) {
           console.error("Errore parsing messaggio WS:", e);
@@ -108,8 +123,8 @@ const createApiStore = () => {
       return new Promise((resolve, reject) => {
         try {
           socket.send(JSON.stringify(payload));
-          // Impostiamo il resolver che sarà chiamato da onmessage
           messageResolver = resolve;
+          messageRejecter = reject;
         } catch (err) {
           update(state => ({ ...state, error: err.message, loading: false }));
           reject(err);
@@ -141,8 +156,8 @@ const createApiStore = () => {
 
           try {
             socket.send(JSON.stringify(payload));
-            // Impostiamo il resolver
             messageResolver = resolve;
+            messageRejecter = reject;
           } catch (err) {
             update(state => ({ ...state, error: err.message, loading: false }));
             reject(err);

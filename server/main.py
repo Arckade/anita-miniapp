@@ -1,25 +1,26 @@
+import asyncio
 import os
 import json
-from typing import List
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form, WebSocket, WebSocketDisconnect
+import base64
+import time
+import logging
+from typing import List, Optional
+from pathlib import Path
+
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
 import httpx
-import subprocess
-from pathlib import Path
-import logging
 from google import genai
-from google.genai import types  # 1. Importa types per la configurazione
+from google.genai import types
 
 # Carica le variabili d'ambiente
 load_dotenv()
 
-# Configura il Client
+# Configura i Client
 api_key = os.getenv("VITE_GEMINI_KEY") or os.getenv("GEMINI_API_KEY")
-
-# Optional OpenAI key for transcription (Whisper)
 openai_key = os.getenv("OPENAI_API_KEY")
 
 if api_key:
@@ -29,14 +30,16 @@ else:
 
 app = FastAPI()
 
+# Configurazione Logging
 logging.basicConfig(level=logging.INFO)
 
-# Directory to serve saved recordings
+# Directory per salvare le registrazioni
 BASE_DIR = os.path.dirname(__file__)
 RECORDINGS_DIR = os.path.join(BASE_DIR, 'recordings')
 os.makedirs(RECORDINGS_DIR, exist_ok=True)
 
-# Mount recordings as static files at /recordings
+# Monta la directory delle registrazioni come file statici
+# (Utile se il frontend deve riprodurre i file salvati)
 app.mount('/recordings', StaticFiles(directory=RECORDINGS_DIR), name='recordings')
 
 # --- Configurazione CORS ---
@@ -52,171 +55,226 @@ app.add_middleware(
 class Message(BaseModel):
     role: str
     content: str
-    type: str = None
-    content: str = None
-    filename: str = None
+    type: Optional[str] = None
+    filename: Optional[str] = None
 
-# 2. Aggiorniamo ChatRequest per includere la lingua (opzionale con default)
 class ChatRequest(BaseModel):
     messages: List[Message] = []
-    language: str = "italiano"  # Default se non specificato
-    
+    language: str = "italiano"
 
 
-# --- Rotte ---
-
+# --- WebSocket Endpoint ---
 @app.websocket("/chat")
 async def chat(websocket: WebSocket):
     await websocket.accept()
+    
     try:
-        # --- AGGIUNTO WHILE TRUE ---
+        # --- CICLO PRINCIPALE ---
         while True:
             # 1. Ricezione del messaggio JSON dal client
-            # Questa istruzione mette in pausa l'esecuzione finché non arriva un messaggio
             data = await websocket.receive_text()
 
-            # 2. Parsing e validazione dei dati
+            # 2. Parsing JSON
             try:
                 payload = json.loads(data)
-                request = ChatRequest(**payload)
             except ValueError as e:
                 await websocket.send_json({"error": f"JSON non valido: {str(e)}"})
-                continue  # Modificato da 'return' a 'continue' per non chiudere la connessione
+                continue
+
+            msg_type = payload.get("type")
+
+            # ---------------------------------------------------------
+            # GESTIONE AUDIO (Nuova Logica WebSocket)
+            # ---------------------------------------------------------
+            if msg_type == "audio":
+                try:
+                    base64_audio = payload.get("content")
+                    filename = payload.get("filename")
+                    language = payload.get("language", "italiano")
+
+                    if not base64_audio or not filename:
+                        raise ValueError("Dati audio incompleti (manca content o filename)")
+
+                    # Decodifica Base64 — rimuove l'header "data:audio/webm;base64," se presente
+                    if "," in base64_audio:
+                        _, encoded = base64_audio.split(",", 1)
+                    else:
+                        encoded = base64_audio
+                    
+                    file_bytes = base64.b64decode(encoded)
+                    
+                    # Salva il file su disco
+                    timestamp = int(time.time() * 1000)
+                    safe_filename = f"{timestamp}-{filename}"
+                    safe_path = os.path.join(RECORDINGS_DIR, safe_filename)
+
+                    with open(safe_path, 'wb') as f:
+                        f.write(file_bytes)
+
+                    # --- Conversione Audio (ffmpeg) ---
+                    transcription = None
+                    converted = False
+                    converted_path = None
+
+                    try:
+                        src_path = Path(safe_path)
+                        ext = src_path.suffix.lower()
+
+                        # Converti in wav 16 kHz mono se il formato non è già supportato
+                        if ext not in ['.wav', '.flac', '.mp3']:
+                            converted_path = str(src_path.with_suffix('.wav'))
+                            logging.info(f"Conversione ffmpeg: {safe_path} -> {converted_path}")
+
+                            proc = await asyncio.create_subprocess_exec(
+                                'ffmpeg', '-y', '-i', safe_path,
+                                '-ar', '16000', '-ac', '1', converted_path,
+                                stdout=asyncio.subprocess.PIPE,
+                                stderr=asyncio.subprocess.PIPE
+                            )
+                            _, stderr_bytes = await proc.communicate()
+                            if proc.returncode != 0:
+                                raise RuntimeError(stderr_bytes.decode('utf-8', errors='ignore'))
+                            converted = True
+                    except RuntimeError as e:
+                        logging.warning(f"ffmpeg conversion failed: {e}")
+                        converted = False
+                        converted_path = None
+                    except Exception as e:
+                        logging.warning(f"Errore generico conversione: {e}")
+                        converted = False
+                        converted_path = None
+
+                    # --- Trascrizione (OpenAI Whisper) ---
+                    if openai_key:
+                        try:
+                            # Usa il file convertito se esiste, altrimenti l'originale
+                            audio_to_send = converted_path if converted_path else safe_path
+                            
+                            # Determina il mimetype
+                            content_type = 'audio/wav' if converted else 'audio/webm'
+                            
+                            async with httpx.AsyncClient(timeout=120.0) as http_client:
+                                with open(audio_to_send, 'rb') as fh:
+                                    files = {
+                                        'file': (Path(audio_to_send).name, fh, content_type)
+                                    }
+                                    data_whisper = {'model': 'whisper-1'}
+                                    
+                                    # Mappatura lingua per Whisper (en / it)
+                                    if language:
+                                        lang_code = 'en' if language.lower().startswith('en') else 'it'
+                                        data_whisper['language'] = lang_code
+
+                                    headers = {'Authorization': f'Bearer {openai_key}'}
+                                    logging.info(f"Invio file {audio_to_send} a Whisper...")
+                                    
+                                    resp = await http_client.post(
+                                        'https://api.openai.com/v1/audio/transcriptions', 
+                                        headers=headers,
+                                        data=data_whisper, 
+                                        files=files
+                                    )
+
+                                    if resp.status_code == 200:
+                                        j = resp.json()
+                                        transcription = j.get('text')
+                                        logging.info(f"Trascrizione completata: {transcription}")
+                                    else:
+                                        logging.warning(f"Trascrizione fallita: {resp.status_code} {resp.text}")
+                                        await websocket.send_json({"error": f"Errore API Whisper: {resp.text}"})
+                                        continue # Salta l'invio della risposta positiva
+
+                        except Exception as e:
+                            logging.exception(f"Errore durante trascrizione: {e}")
+                            await websocket.send_json({"error": f"Errore trascrizione: {str(e)}"})
+                            continue
+
+                    # Invia la risposta al client (risolve la Promise nel frontend)
+                    await websocket.send_json({
+                        "type": "audio_response",
+                        "filename": safe_filename,
+                        "transcription": transcription,
+                        "converted": converted,
+                        "message": "uploaded"
+                    })
+
+                except Exception as e:
+                    logging.error(f"Errore elaborazione audio: {e}")
+                    await websocket.send_json({"error": f"Errore elaborazione audio: {str(e)}"})
+                
+                # Continua al prossimo messaggio (non eseguire la logica chat testuale)
+                continue
+
+            # ---------------------------------------------------------
+            # GESTIONE CHAT TESTUALE
+            # ---------------------------------------------------------
+            
+            try:
+                # Se non è audio, ci aspettiamo una ChatRequest standard
+                request = ChatRequest(**payload)
+            except ValueError as e:
+                await websocket.send_json({"error": f"JSON non valido per chat: {str(e)}"})
+                continue
             except Exception as e:
                 await websocket.send_json({"error": f"Errore di validazione: {str(e)}"})
-                continue  # Modificato da 'return' a 'continue'
+                continue
 
             if not request.messages:
                 await websocket.send_json({"error": "Nessun messaggio o contenuto fornito"})
-                continue  # Modificato da 'return' a 'continue'
+                continue
 
-            # Preparazione messaggi cronologico (history)
+            # Preparazione messaggi per l'SDK
             sdk_messages = []
             for msg in request.messages:
+                # Ignora messaggi di tipo audio nella cronologia testuale
                 if msg.type == "audio":
                     continue
                 sdk_messages.append({
                     "role": "user" if msg.role == "user" else "model",
                     "parts": [{"text": msg.content}]
                 })
+            
             if not sdk_messages:
+                # Se dopo il filtro non ci sono messaggi, non chiamare l'API
                 continue
 
             if client is None:
                 await websocket.send_json({"error": "AI API key non configurata."})
                 return
 
-            # 3. Creiamo il System Prompt dinamico
+            # System Prompt dinamico
             system_instruction_text = (
                 f"Sei un assistente utile e professionale. "
                 f"Rispondi esclusivamente in {request.language}. "
                 f"Non usare altre lingue a meno che non sia strettamente necessario per tradurre termini tecnici."
             )
 
-            # 4. Configurazione del modello
+            # Configurazione modello
             generate_content_config = types.GenerateContentConfig(
                 system_instruction=system_instruction_text,
             )
 
-            # 5. Chiamata all'API AI
-            # Qui usiamo await, ma la libreria google-genai potrebbe essere sincrona.
-            # Se ottieni un errore di "coroutine never awaited", rimuovi await qui.
-            response = client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=sdk_messages,
-                config=generate_content_config
-            )
+            # Chiamata all'API Google GenAI
+            try:
+                response = client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=sdk_messages,
+                    config=generate_content_config
+                )
 
-            # Estrazione risposta
-            response_text = ""
-            if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
-                response_text = response.candidates[0].content.parts[0].text
+                # Estrazione testo risposta
+                response_text = ""
+                if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
+                    response_text = response.candidates[0].content.parts[0].text
 
-            # 6. Invio della risposta
-            await websocket.send_json({"response": response_text})
+                # Invio risposta al client
+                await websocket.send_json({"response": response_text})
 
-            # --- FINE CICLO ---
-            # Una volta arrivati qui, il ciclo ricomincia e aspetta il prossimo messaggio
+            except Exception as e:
+                logging.error(f"Errore generazione AI: {e}")
+                await websocket.send_json({"error": "Errore durante la generazione della risposta."})
 
     except WebSocketDisconnect:
         logging.info("Client disconnesso intenzionalmente")
-    # except Exception as e:
-    #     logging.error(f"Errore durante la gestione della chat WebSocket: {e}")
-    #     try:
-    #         await websocket.send_json({"error": f"Errore interno del server: {str(e)}"})
-    #     except Exception:
-    #         pass
-
-@app.post('/upload-audio')
-async def upload_audio(file: UploadFile = File(...), language: str = Form('italiano')):
-    try:
-        # Cartella per salvare le registrazioni
-        base_dir = os.path.dirname(__file__)
-        rec_dir = os.path.join(base_dir, 'recordings')
-        os.makedirs(rec_dir, exist_ok=True)
-
-        filename = f"voice-{int(__import__('time').time() * 1000)}-{file.filename}"
-        safe_path = os.path.join(rec_dir, filename)
-
-        # Salva il file
-        with open(safe_path, 'wb') as f:
-            content = await file.read()
-            f.write(content)
-
-        # Prova a trascrivere usando OpenAI Whisper se la chiave è configurata
-        transcription = None
-        converted = False
-        converted_path = None
-
-        # If file format is not optimal for STT, try converting to WAV (mono, 16k)
-        try:
-            src_path = Path(safe_path)
-            ext = src_path.suffix.lower()
-            # If source is not wav/flac/mp3, try conversion
-            if ext not in ['.wav', '.flac', '.mp3']:
-                converted_path = str(src_path.with_suffix('.wav'))
-                logging.info(f"Attempting conversion {safe_path} -> {converted_path}")
-                # ffmpeg must be installed on the host
-                subprocess.run([
-                    'ffmpeg', '-y', '-i', safe_path,
-                    '-ar', '16000', '-ac', '1', converted_path
-                ], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                converted = True
-        except subprocess.CalledProcessError as e:
-            logging.warning(f"ffmpeg conversion failed: {e.stderr.decode('utf-8', errors='ignore')}")
-            converted = False
-            converted_path = None
-        except Exception as e:
-            logging.warning(f"Conversion check error: {e}")
-            converted = False
-            converted_path = None
-
-        if openai_key:
-            try:
-                audio_to_send = converted_path if converted_path else safe_path
-                async with httpx.AsyncClient(timeout=120.0) as client:
-                    with open(audio_to_send, 'rb') as fh:
-                        files = {
-                            'file': (Path(audio_to_send).name, fh, file.content_type or 'audio/wav')
-                        }
-                        data = {'model': 'whisper-1'}
-                        if language:
-                            data['language'] = 'en' if language.lower().startswith('en') else 'it'
-
-                        headers = {'Authorization': f'Bearer {openai_key}'}
-                        logging.info(f"Sending file {audio_to_send} to Whisper for transcription")
-                        resp = await client.post('https://api.openai.com/v1/audio/transcriptions', headers=headers,
-                                                 data=data, files=files)
-                        if resp.status_code == 200:
-                            j = resp.json()
-                            transcription = j.get('text')
-                            logging.info(f"Transcription result: {transcription}")
-                        else:
-                            logging.warning(f"Transcription failed: {resp.status_code} {resp.text}")
-            except Exception as e:
-                logging.exception(f"Errore during transcription: {e}")
-
-        return {"filename": filename, "transcription": transcription, "converted": converted, "message": "uploaded"}
     except Exception as e:
-        print(f"Errore upload audio: {e}")
-        raise HTTPException(status_code=500, detail=f"Errore salvataggio audio: {str(e)}")
+        logging.error(f"Errore WebSocket generico: {e}")
