@@ -1,21 +1,21 @@
 import { writable } from 'svelte/store';
-import { getWsUrl, getBackendUrl } from '$lib/utils.js';
+import { getWsUrl } from '$lib/utils.js';
 
 const createApiStore = () => {
   const initialState = {
     data: null,
     loading: false,
     error: null,
-    connected: false // New state to track WS connection
+    connected: false // Nuovo stato per tracciare la connessione WS
   };
 
   const { subscribe, update, set } = writable(initialState);
 
   let socket = null;
   let reconnectTimer = null;
-  let messageResolver = null; // Promise resolver for the awaited response
+  let messageResolver = null; // Promise resolver per la risposta attesa
 
-  // Connection function
+  // Funzione di connessione
   const connect = () => {
     if (socket && (socket.readyState === WebSocket.CONNECTING || socket.readyState === WebSocket.OPEN)) {
       return;
@@ -29,7 +29,7 @@ const createApiStore = () => {
       socket.onopen = () => {
         console.log("WebSocket Connesso");
         update(s => ({ ...s, error: null, connected: true, loading: false }));
-        // Clear any pending reconnection timers
+        // Pulisci eventuali timer di riconnessione pendenti
         if (reconnectTimer) clearTimeout(reconnectTimer);
       };
 
@@ -37,7 +37,7 @@ const createApiStore = () => {
         console.log("WebSocket Disconnesso. Riconnessione tra 3 secondi...");
         update(s => ({ ...s, connected: false, loading: false }));
         
-        // Automatic reconnection every 3 seconds
+        // Riconnessione automatica ogni 3 secondi
         if (reconnectTimer) clearTimeout(reconnectTimer);
         reconnectTimer = setTimeout(connect, 3000);
       };
@@ -45,17 +45,17 @@ const createApiStore = () => {
       socket.onerror = (error) => {
         console.error("WebSocket Error:", error);
         update(s => ({ ...s, error: "Errore di connessione WebSocket", connected: false }));
-        socket.close(); // Close to trigger onclose and reconnection
+        socket.close(); // Chiude per triggerare onclose e la riconnessione
       };
 
       socket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
           
-          // Update the store with received data
+          // Aggiorna lo store con i dati ricevuti
           update(s => ({ ...s, data: data, loading: false }));
 
-          // If there is a promise waiting for a response (for await fetchData), resolve it
+          // Se c'è una promise in attesa di risposta (per await fetchData), la risolviamo
           if (messageResolver) {
             messageResolver(data);
             messageResolver = null;
@@ -73,43 +73,25 @@ const createApiStore = () => {
     }
   };
 
-  // Waits for the socket to be open, with timeout (default 8 seconds)
-  const waitForConnection = (timeout = 8000) => {
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      return Promise.resolve();
-    }
-    // If the socket is closed, start reconnection immediately
-    if (!socket || socket.readyState === WebSocket.CLOSED) {
-      connect();
-    }
-    return new Promise((resolve, reject) => {
-      const deadline = Date.now() + timeout;
-      const check = () => {
-        if (socket && socket.readyState === WebSocket.OPEN) {
-          resolve();
-        } else if (Date.now() >= deadline) {
-          reject(new Error('WebSocket non connesso. Riprova tra qualche istante.'));
-        } else {
-          setTimeout(check, 150);
-        }
-      };
-      check();
-    });
-  };
-
-  // Start the initial connection
+  // Avvia la connessione iniziale
   connect();
 
   return {
     subscribe,
 
-    // Method to send chat messages
+    // Metodo per inviare messaggi di chat
     fetchData: async (messaggi, language = 'it') => {
-      await waitForConnection();
+      // Se non connesso, segnaliamo errore o attendiamo (qui segnaliamo errore per immediatezza)
+      if (!socket || socket.readyState !== WebSocket.OPEN) {
+        // Opzionale: potremmo aspettare che la connessione sia pronta, 
+        // ma per semplicità lanciamo un errore che l'UI può gestire.
+        // Nota: La riconnessione automatica è già attiva in background.
+        throw new Error("WebSocket non connesso. Riprova tra qualche istante.");
+      }
 
       update(state => ({ ...state, loading: true, error: null }));
 
-      // Message mapping
+      // Mappatura messaggi
       const messages = messaggi.map(m => ({
         role: m.mittente === "Io" ? "user" : "model",
         content: m.testo
@@ -118,7 +100,7 @@ const createApiStore = () => {
       const languageName = language === 'en' ? 'English' : (language === 'it' ? 'Italiano' : language);
 
       const payload = {
-        type: 'chat', // Identifier for the backend
+        type: 'chat', // Identificativo per il backend
         messages: messages,
         language: languageName
       };
@@ -126,7 +108,7 @@ const createApiStore = () => {
       return new Promise((resolve, reject) => {
         try {
           socket.send(JSON.stringify(payload));
-          // Set the resolver that will be called by onmessage
+          // Impostiamo il resolver che sarà chiamato da onmessage
           messageResolver = resolve;
         } catch (err) {
           update(state => ({ ...state, error: err.message, loading: false }));
@@ -135,65 +117,50 @@ const createApiStore = () => {
       });
     },
 
-    // Method to send audio files via HTTP multipart, then get AI response via WebSocket
+    // Metodo per inviare file audio (convertito in Base64 per WS)
     uploadAudio: async (file, language = 'it') => {
+      if (!socket || socket.readyState !== WebSocket.OPEN) {
+         throw new Error("WebSocket non connesso.");
+      }
+
       update(state => ({ ...state, loading: true, error: null }));
 
-      try {
-        // 1. Upload audio via HTTP (avoids huge base64 payloads on WebSocket)
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('language', language === 'en' ? 'English' : 'Italiano');
+      // Leggiamo il file come DataURL (Base64)
+      const reader = new FileReader();
+      
+      return new Promise((resolve, reject) => {
+        reader.onload = () => {
+          const base64Audio = reader.result; // "data:audio/webm;base64,......"
+          
+          const payload = {
+            type: 'audio', // Identificativo per il backend
+            content: base64Audio,
+            filename: file.name || `voice-${Date.now()}.webm`,
+            language: language
+          };
 
-        // Use new URL to resolve the path from root, ignoring any suffixes in VITE_BACKEND
-        const uploadUrl = new URL('/upload-audio', getBackendUrl()).href;
-        const res = await fetch(uploadUrl, {
-          method: 'POST',
-          body: formData
-        });
-
-        if (!res.ok) {
-          throw new Error(`Upload fallito: ${res.status}`);
-        }
-
-        const data = await res.json();
-        const transcription = data.transcription;
-
-        if (!transcription) {
-          // No transcription available (OpenAI key not configured)
-          update(state => ({ ...state, loading: false }));
-          return { response: '' };
-        }
-
-        // 2. Send the transcription as a chat message via WebSocket to get the AI response
-        await waitForConnection();
-
-        const languageName = language === 'en' ? 'English' : 'Italiano';
-        const payload = {
-          type: 'chat',
-          messages: [{ role: 'user', content: transcription }],
-          language: languageName
-        };
-
-        return new Promise((resolve, reject) => {
           try {
             socket.send(JSON.stringify(payload));
+            // Impostiamo il resolver
             messageResolver = resolve;
           } catch (err) {
             update(state => ({ ...state, error: err.message, loading: false }));
             reject(err);
           }
-        });
+        };
 
-      } catch (err) {
-        update(state => ({ ...state, error: err.message, loading: false }));
-        throw err;
-      }
+        reader.onerror = (err) => {
+          update(state => ({ ...state, error: "Lettura file fallita", loading: false }));
+          reject(err);
+        };
+
+        reader.readAsDataURL(file);
+      });
     },
 
     reset: () => set(initialState),
     
-    // Utility to check connection state
+    // Utility per controllare lo stato
     isConnected: () => socket && socket.readyState === WebSocket.OPEN
   };
 };

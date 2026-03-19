@@ -12,7 +12,7 @@ export const getAudioUrl = (source) => {
         return source;
     }
     const backend = getBackendUrl();
-    // Removes trailing slash if present and appends the path
+    // Rimuove lo slash finale se presente e aggiunge il path
     const baseUrl = backend.replace(/\/$/, '');
     return `${baseUrl}/recordings/${source}`;
 };
