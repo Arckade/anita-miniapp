@@ -52,15 +52,15 @@ app.add_middleware(
 class Message(BaseModel):
     role: str
     content: str
-
+    type: str = None
+    content: str = None
+    filename: str = None
 
 # 2. Aggiorniamo ChatRequest per includere la lingua (opzionale con default)
 class ChatRequest(BaseModel):
     messages: List[Message] = []
     language: str = "italiano"  # Default se non specificato
-    type: str = None
-    content: str = None
-    filename: str = None
+    
 
 
 # --- Rotte ---
@@ -86,17 +86,21 @@ async def chat(websocket: WebSocket):
                 await websocket.send_json({"error": f"Errore di validazione: {str(e)}"})
                 continue  # Modificato da 'return' a 'continue'
 
-            if not request.messages and not request.content:
+            if not request.messages:
                 await websocket.send_json({"error": "Nessun messaggio o contenuto fornito"})
                 continue  # Modificato da 'return' a 'continue'
 
             # Preparazione messaggi cronologico (history)
             sdk_messages = []
             for msg in request.messages:
+                if msg.type == "audio":
+                    continue
                 sdk_messages.append({
                     "role": "user" if msg.role == "user" else "model",
                     "parts": [{"text": msg.content}]
                 })
+            if not sdk_messages:
+                continue
 
             if client is None:
                 await websocket.send_json({"error": "AI API key non configurata."})
@@ -136,12 +140,12 @@ async def chat(websocket: WebSocket):
 
     except WebSocketDisconnect:
         logging.info("Client disconnesso intenzionalmente")
-    except Exception as e:
-        logging.error(f"Errore durante la gestione della chat WebSocket: {e}")
-        try:
-            await websocket.send_json({"error": f"Errore interno del server: {str(e)}"})
-        except Exception:
-            pass
+    # except Exception as e:
+    #     logging.error(f"Errore durante la gestione della chat WebSocket: {e}")
+    #     try:
+    #         await websocket.send_json({"error": f"Errore interno del server: {str(e)}"})
+    #     except Exception:
+    #         pass
 
 @app.post('/upload-audio')
 async def upload_audio(file: UploadFile = File(...), language: str = Form('italiano')):
