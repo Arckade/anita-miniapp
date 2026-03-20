@@ -122,6 +122,7 @@ const createApiStore = () => {
 
       return new Promise((resolve, reject) => {
         try {
+          console.log(payload)
           socket.send(JSON.stringify(payload));
           messageResolver = resolve;
           messageRejecter = reject;
@@ -155,6 +156,7 @@ const createApiStore = () => {
           };
 
           try {
+            console.log(payload)
             socket.send(JSON.stringify(payload));
             messageResolver = resolve;
             messageRejecter = reject;

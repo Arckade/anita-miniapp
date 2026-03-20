@@ -55,12 +55,17 @@ app.add_middleware(
 class Message(BaseModel):
     role: str
     content: str
-    type: Optional[str] = None
-    filename: Optional[str] = None
 
 class ChatRequest(BaseModel):
+    type: str
     messages: List[Message] = []
-    language: str = "italiano"
+    language: str = "it"
+
+class AudioMessage(BaseModel):
+    type: str
+    filename: Optional[str] = None
+    content: str
+    language: str = "it"
 
 
 # --- WebSocket Endpoint ---
@@ -88,24 +93,23 @@ async def chat(websocket: WebSocket):
             # ---------------------------------------------------------
             if msg_type == "audio":
                 try:
-                    base64_audio = payload.get("content")
-                    filename = payload.get("filename")
-                    language = payload.get("language", "italiano")
+                    audio_message = AudioMessage.model_validate(payload)
+                    language = audio_message.language
 
-                    if not base64_audio or not filename:
+                    if not audio_message.content or not audio_message.filename:
                         raise ValueError("Dati audio incompleti (manca content o filename)")
 
                     # Decodifica Base64 — rimuove l'header "data:audio/webm;base64," se presente
-                    if "," in base64_audio:
-                        _, encoded = base64_audio.split(",", 1)
+                    if "," in audio_message.content:
+                        _, encoded = audio_message.content.split(",", 1)
                     else:
-                        encoded = base64_audio
+                        encoded = audio_message.content
                     
                     file_bytes = base64.b64decode(encoded)
                     
                     # Salva il file su disco
                     timestamp = int(time.time() * 1000)
-                    safe_filename = f"{timestamp}-{filename}"
+                    safe_filename = f"{timestamp}-{audio_message.filename}"
                     safe_path = os.path.join(RECORDINGS_DIR, safe_filename)
 
                     with open(safe_path, 'wb') as f:
@@ -149,29 +153,28 @@ async def chat(websocket: WebSocket):
                         try:
                             # Usa il file convertito se esiste, altrimenti l'originale
                             audio_to_send = converted_path if converted_path else safe_path
-                            
+
                             # Determina il mimetype
                             content_type = 'audio/wav' if converted else 'audio/webm'
-                            
+
                             async with httpx.AsyncClient(timeout=120.0) as http_client:
                                 with open(audio_to_send, 'rb') as fh:
                                     files = {
                                         'file': (Path(audio_to_send).name, fh, content_type)
                                     }
                                     data_whisper = {'model': 'whisper-1'}
-                                    
+
                                     # Mappatura lingua per Whisper (en / it)
-                                    if language:
-                                        lang_code = 'en' if language.lower().startswith('en') else 'it'
-                                        data_whisper['language'] = lang_code
+                                    if audio_message.language:
+                                        data_whisper['language'] = audio_message.language
 
                                     headers = {'Authorization': f'Bearer {openai_key}'}
                                     logging.info(f"Invio file {audio_to_send} a Whisper...")
-                                    
+
                                     resp = await http_client.post(
-                                        'https://api.openai.com/v1/audio/transcriptions', 
+                                        'https://api.openai.com/v1/audio/transcriptions',
                                         headers=headers,
-                                        data=data_whisper, 
+                                        data=data_whisper,
                                         files=files
                                     )
 
@@ -209,33 +212,20 @@ async def chat(websocket: WebSocket):
             # GESTIONE CHAT TESTUALE
             # ---------------------------------------------------------
             
-            try:
-                # Se non è audio, ci aspettiamo una ChatRequest standard
-                request = ChatRequest(**payload)
-            except ValueError as e:
-                await websocket.send_json({"error": f"JSON non valido per chat: {str(e)}"})
-                continue
-            except Exception as e:
-                await websocket.send_json({"error": f"Errore di validazione: {str(e)}"})
-                continue
+            chat_request = ChatRequest.model_validate(payload)
 
-            if not request.messages:
-                await websocket.send_json({"error": "Nessun messaggio o contenuto fornito"})
+            if not chat_request.messages:
                 continue
 
             # Preparazione messaggi per l'SDK
             sdk_messages = []
-            for msg in request.messages:
-                # Ignora messaggi di tipo audio nella cronologia testuale
-                if msg.type == "audio":
-                    continue
+            for msg in chat_request.messages:
                 sdk_messages.append({
                     "role": "user" if msg.role == "user" else "model",
                     "parts": [{"text": msg.content}]
                 })
             
             if not sdk_messages:
-                # Se dopo il filtro non ci sono messaggi, non chiamare l'API
                 continue
 
             if client is None:
@@ -245,7 +235,7 @@ async def chat(websocket: WebSocket):
             # System Prompt dinamico
             system_instruction_text = (
                 f"Sei un assistente utile e professionale. "
-                f"Rispondi esclusivamente in {request.language}. "
+                f"Rispondi esclusivamente in {chat_request.language}. "
                 f"Non usare altre lingue a meno che non sia strettamente necessario per tradurre termini tecnici."
             )
 
