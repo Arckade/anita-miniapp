@@ -39,7 +39,6 @@ RECORDINGS_DIR = os.path.join(BASE_DIR, 'recordings')
 os.makedirs(RECORDINGS_DIR, exist_ok=True)
 
 # Monta la directory delle registrazioni come file statici
-# (Utile se il frontend deve riprodurre i file salvati)
 app.mount('/recordings', StaticFiles(directory=RECORDINGS_DIR), name='recordings')
 
 # --- Configurazione CORS ---
@@ -56,10 +55,12 @@ class Message(BaseModel):
     role: str
     content: str
 
+
 class ChatRequest(BaseModel):
     type: str
     messages: List[Message] = []
     language: str = "it"
+
 
 class AudioMessage(BaseModel):
     type: str
@@ -72,7 +73,7 @@ class AudioMessage(BaseModel):
 @app.websocket("/chat")
 async def chat(websocket: WebSocket):
     await websocket.accept()
-    
+
     try:
         # --- CICLO PRINCIPALE ---
         while True:
@@ -104,9 +105,9 @@ async def chat(websocket: WebSocket):
                         _, encoded = audio_message.content.split(",", 1)
                     else:
                         encoded = audio_message.content
-                    
+
                     file_bytes = base64.b64decode(encoded)
-                    
+
                     # Salva il file su disco
                     timestamp = int(time.time() * 1000)
                     safe_filename = f"{timestamp}-{audio_message.filename}"
@@ -185,7 +186,7 @@ async def chat(websocket: WebSocket):
                                     else:
                                         logging.warning(f"Trascrizione fallita: {resp.status_code} {resp.text}")
                                         await websocket.send_json({"error": f"Errore API Whisper: {resp.text}"})
-                                        continue # Salta l'invio della risposta positiva
+                                        continue  # Salta l'invio della risposta positiva
 
                         except Exception as e:
                             logging.exception(f"Errore durante trascrizione: {e}")
@@ -204,18 +205,58 @@ async def chat(websocket: WebSocket):
                 except Exception as e:
                     logging.error(f"Errore elaborazione audio: {e}")
                     await websocket.send_json({"error": f"Errore elaborazione audio: {str(e)}"})
-                
+
                 # Continua al prossimo messaggio (non eseguire la logica chat testuale)
                 continue
 
             # ---------------------------------------------------------
             # GESTIONE CHAT TESTUALE
             # ---------------------------------------------------------
-            
+
             chat_request = ChatRequest.model_validate(payload)
 
             if not chat_request.messages:
                 continue
+
+            # --- MODIFICA: Logica per messaggio "sample" ---
+            # Controlla se l'ultimo messaggio dell'utente è "sample"
+            last_message = chat_request.messages[-1]
+            if last_message.role == "user" and last_message.content.strip().lower() == "sample":
+                logging.info("Rilevato messaggio 'sample'. Invio audio di test statico.")
+
+                # Definisci il path statico del file audio di test
+                # Assicurati che questo file esista nella cartella 'recordings'
+                sample_audio_path = os.path.join(RECORDINGS_DIR, "test_sample.wav")
+
+                if os.path.exists(sample_audio_path):
+                    try:
+                        with open(sample_audio_path, "rb") as audio_file:
+                            # Leggi il file e convertilo in Base64
+                            binary_data = audio_file.read()
+                            b64_content = base64.b64encode(binary_data).decode('utf-8')
+
+                        # Costruisci la risposta JSON con type: "audio"
+                        # Simula la struttura di un messaggio audio ricevuto, ma invertito (server -> client)
+                        response_payload = {
+                            "type": "audio",
+                            "content": f"data:audio/wav;base64,{b64_content}",
+                            "filename": "test_sample.wav"
+                        }
+
+                        await websocket.send_json(response_payload)
+
+                        # Salta il resto della logica (LLM) e torna ad ascoltare
+                        continue
+
+                    except Exception as e:
+                        logging.error(f"Errore lettura file sample: {e}")
+                        await websocket.send_json({"error": "Errore durante la lettura del file sample"})
+                        continue
+                else:
+                    logging.warning(f"File sample non trovato in: {sample_audio_path}")
+                    await websocket.send_json({"error": "File audio di test non trovato sul server"})
+                    continue
+            # -----------------------------------------------
 
             # Preparazione messaggi per l'SDK
             sdk_messages = []
@@ -224,7 +265,7 @@ async def chat(websocket: WebSocket):
                     "role": "user" if msg.role == "user" else "model",
                     "parts": [{"text": msg.content}]
                 })
-            
+
             if not sdk_messages:
                 continue
 
