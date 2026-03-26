@@ -19,7 +19,7 @@
       aria-label="Play audio"
     >
       <span class="icon">▶️</span>
-      <span class="label">{msg.mittente === 'Io' ? (language === 'en' ? 'Voice' : 'Vocale') : '▶️'}</span>
+      <span class="label">{msg.mittente === 'Io' ? (language === 'en' ? 'Voice' : 'Vocale') : (language === 'en' ? 'Listen' : 'Ascolta')}</span>
     </button>
   {/if}
 </div>
