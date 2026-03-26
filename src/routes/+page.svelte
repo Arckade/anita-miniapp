@@ -38,8 +38,14 @@
 
     try {
       const response = await apiStore.fetchData(messaggi, language);
-      const rispostaTesto = response?.response || response?.text || JSON.stringify(response);
-      messaggi = [...messaggi, { testo: rispostaTesto, mittente: "AI" }];
+
+      if (response?.type === 'audio' && response?.content) {
+        // Risposta audio dal server (es. comando "sample")
+        messaggi = [...messaggi, { testo: '', audio: response.content, mittente: 'AI' }];
+      } else {
+        const rispostaTesto = response?.response || response?.text || JSON.stringify(response);
+        messaggi = [...messaggi, { testo: rispostaTesto, mittente: "AI" }];
+      }
       
     } catch (err) {
       console.error(err);

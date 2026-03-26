@@ -8,7 +8,7 @@ export const getWsUrl = () => {
 };
 
 export const getAudioUrl = (source) => {
-    if (source.startsWith('blob:') || source.startsWith('http')) {
+    if (source.startsWith('blob:') || source.startsWith('http') || source.startsWith('data:')) {
         return source;
     }
     const backend = getBackendUrl();
