@@ -183,7 +183,7 @@
     margin: 0;
     padding: 0;
     height: 100vh;
-    background-color: #000000;
+    background-color: #0a0a0f;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
       Helvetica, Arial, sans-serif;
     display: flex;
@@ -194,30 +194,39 @@
     width: 100%;
     max-width: 500px;
     height: 100%;
-    background-color: #000000;
+    background-image: url('/immagine_sfondo.png');
+    background-size: cover;
+    background-position: center;
     display: flex;
     flex-direction: column;
     position: relative;
-    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 0 40px rgba(124, 58, 237, 0.15);
   }
 
   .chat-container {
     flex: 1;
-    padding: 20px;
+    padding: 16px 16px 8px;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    background-color: #000000;
+    gap: 8px;
+    background-color: transparent;
+    /* Nasconde la scrollbar su tutti i browser */
+    scrollbar-width: none;       /* Firefox */
+    -ms-overflow-style: none;    /* IE / Edge legacy */
   }
 
+  .chat-container::-webkit-scrollbar {
+    display: none;               /* Chrome, Safari, Opera */
+  }
 
   .typing {
     font-size: 12px;
-    color: #aaa;
+    color: rgba(255,255,255,0.45);
     margin-left: 20px;
-    margin-bottom: 5px;
+    margin-bottom: 4px;
     font-style: italic;
     height: 15px;
+    letter-spacing: 0.03em;
   }
 </style>

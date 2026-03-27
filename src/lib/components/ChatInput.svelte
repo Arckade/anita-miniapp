@@ -101,57 +101,80 @@
 
 <style>
   form {
-    padding: 10px;
-    background-color: #2a2a2a;
+    padding: 10px 12px;
+    background: rgba(18, 18, 28, 0.85);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
     display: flex;
-    gap: 10px;
-    border-top: 1px solid #444;
+    gap: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
     align-items: center;
-    border-radius: 20px;
+    border-radius: 24px;
+    margin: 0 6px 8px;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
   }
 
   input {
     flex: 1;
-    padding: 12px 15px;
+    padding: 11px 16px;
     border-radius: 20px;
-    border: none;
+    border: 1px solid rgba(255, 255, 255, 0.1);
     outline: none;
-    background-color: #3a3a3a;
-    color: #ffffff;
+    background: rgba(255, 255, 255, 0.06);
+    color: #f0f0f8;
+    font-size: 14.5px;
+    transition: border-color 0.2s, background 0.2s;
+  }
+
+  input::placeholder {
+    color: rgba(255, 255, 255, 0.3);
+  }
+
+  input:focus {
+    border-color: rgba(124, 58, 237, 0.55);
+    background: rgba(255, 255, 255, 0.09);
   }
 
   .hybrid-button {
-    width: 45px;
-    height: 45px;
+    width: 44px;
+    height: 44px;
     border-radius: 50%;
     border: none;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: transform 0.1s, background-color 0.2s;
+    transition: transform 0.15s, background-color 0.2s, box-shadow 0.2s;
     color: white;
+    flex-shrink: 0;
   }
 
   .hybrid-button:active {
-    transform: scale(0.95);
+    transform: scale(0.93);
   }
 
   .hybrid-button:disabled {
-    background-color: #ccc;
+    background-color: rgba(150,150,150,0.3);
     cursor: not-allowed;
-    opacity: 0.7;
+    opacity: 0.6;
   }
 
   .hybrid-button.is-mic {
-    background-color: #54656f;
+    background: linear-gradient(135deg, #4a5568, #2d3748);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
   }
   .hybrid-button.is-mic:active {
-    background-color: #b91c1c;
-    transform: scale(1.1);
+    background: linear-gradient(135deg, #c53030, #9b2c2c);
+    transform: scale(1.08);
+    box-shadow: 0 0 14px rgba(197, 48, 48, 0.5);
   }
 
   .hybrid-button.has-text {
-    background-color: #008069;
+    background: linear-gradient(135deg, #7c3aed, #5b21b6);
+    box-shadow: 0 2px 10px rgba(124, 58, 237, 0.45);
+  }
+
+  .hybrid-button.has-text:hover {
+    box-shadow: 0 4px 16px rgba(124, 58, 237, 0.6);
   }
 </style>

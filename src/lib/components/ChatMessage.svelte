@@ -94,10 +94,10 @@
 <style>
   .bolla {
     padding: 10px 14px;
-    border-radius: 18px;
-    max-width: 75%;
-    font-size: 15px;
-    line-height: 1.4;
+    border-radius: 20px;
+    max-width: 78%;
+    font-size: 14.5px;
+    line-height: 1.5;
     position: relative;
     word-wrap: break-word;
     white-space: pre-wrap;
@@ -105,21 +105,25 @@
     flex-direction: column;
     gap: 8px;
     align-self: flex-start;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
   }
 
   .bolla.io {
-    background-color: #7c3aed;
+    background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
     color: #ffffff;
     align-self: flex-end;
-    border-bottom-right-radius: 4px;
+    border-bottom-right-radius: 5px;
+    border: 1px solid rgba(124, 58, 237, 0.6);
   }
 
   .bolla.ai {
-    background-color: #1e1e1e;
-    color: #e0e0e0;
+    background: rgba(28, 28, 38, 0.82);
+    color: #e8e8f0;
     align-self: flex-start;
-    border-bottom-left-radius: 4px;
+    border-bottom-left-radius: 5px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
   }
 
   /* ---- Audio Player ---- */
@@ -127,49 +131,49 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    min-width: 120px;
+    min-width: 130px;
   }
 
   .play-btn {
     flex-shrink: 0;
-    width: 36px;
-    height: 36px;
+    width: 34px;
+    height: 34px;
     border-radius: 50%;
     border: none;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background 0.2s, transform 0.1s;
+    transition: background 0.2s, transform 0.15s;
   }
 
   .play-btn:active {
-    transform: scale(0.92);
+    transform: scale(0.90);
   }
 
   .bolla.io .play-btn {
-    background: rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.22);
     color: #fff;
   }
 
   .bolla.io .play-btn:hover {
-    background: rgba(255, 255, 255, 0.38);
+    background: rgba(255, 255, 255, 0.35);
   }
 
   .bolla.ai .play-btn {
-    background: rgba(255, 255, 255, 0.12);
-    color: #e0e0e0;
+    background: rgba(255, 255, 255, 0.1);
+    color: #c8c8e0;
   }
 
   .bolla.ai .play-btn:hover {
-    background: rgba(255, 255, 255, 0.22);
+    background: rgba(255, 255, 255, 0.2);
   }
 
   .timer {
-    font-size: 13px;
+    font-size: 12.5px;
     font-variant-numeric: tabular-nums;
-    opacity: 0.85;
-    letter-spacing: 0.02em;
+    opacity: 0.8;
+    letter-spacing: 0.03em;
     white-space: nowrap;
   }
 </style>
