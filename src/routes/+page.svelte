@@ -183,7 +183,7 @@
     margin: 0;
     padding: 0;
     height: 100vh;
-    background-color: #d1d7db;
+    background-color: #000000;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
       Helvetica, Arial, sans-serif;
     display: flex;
@@ -194,11 +194,11 @@
     width: 100%;
     max-width: 500px;
     height: 100%;
-    background-color: #efeae2;
+    background-color: #000000;
     display: flex;
     flex-direction: column;
     position: relative;
-    box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
   }
 
   .chat-container {
@@ -208,15 +208,13 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
-    background-color: #efeae2;
-    background-image: url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png");
-    background-blend-mode: overlay;
+    background-color: #000000;
   }
 
 
   .typing {
     font-size: 12px;
-    color: #666;
+    color: #aaa;
     margin-left: 20px;
     margin-bottom: 5px;
     font-style: italic;

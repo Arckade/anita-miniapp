@@ -102,11 +102,12 @@
 <style>
   form {
     padding: 10px;
-    background-color: #f0f2f5;
+    background-color: #2a2a2a;
     display: flex;
     gap: 10px;
-    border-top: 1px solid #ddd;
+    border-top: 1px solid #444;
     align-items: center;
+    border-radius: 20px;
   }
 
   input {
@@ -115,7 +116,8 @@
     border-radius: 20px;
     border: none;
     outline: none;
-    background-color: #ffffff;
+    background-color: #3a3a3a;
+    color: #ffffff;
   }
 
   .hybrid-button {
