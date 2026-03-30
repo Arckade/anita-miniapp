@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 import httpx
 from google import genai
 from google.genai import types
+from typing_extensions import Literal
 
 # Carica le variabili d'ambiente
 load_dotenv()
@@ -67,7 +68,6 @@ class AudioMessage(BaseModel):
     filename: Optional[str] = None
     content: str
     language: str = "it"
-
 
 # --- WebSocket Endpoint ---
 @app.websocket("/chat")

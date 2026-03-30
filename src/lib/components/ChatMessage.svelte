@@ -1,25 +1,34 @@
 <script>
+  import { getAudioUrl } from '$lib/utils.js';
+
   export let msg;
   export let language;
-  export let playAudio;
+  export let onPlayAudio;
+
+  // Computa l'URL audio reattivamente
+  $: audioUrl = getAudioUrl(msg.audio, msg.audio_format || 'webm');
+  $: showText = msg.testo?.trim();
+  $: showAudio = !!msg.audio;
 </script>
 
 <div class="bolla {msg.mittente === 'Io' ? 'io' : 'ai'}">
-  <!-- Contenuto Testo (Mostrato SOLO se esiste e non è vuoto) -->
-  {#if msg.testo && msg.testo.trim() !== ""}
+  {#if showText}
     <div class="msg-text">{msg.testo}</div>
   {/if}
 
-  <!-- Pulsante Riascolta (Mostrato SOLO se esiste l'audio) -->
-  {#if msg.audio}
-    <button 
-      type="button" 
-      class="play-audio-btn" 
-      on:click={() => playAudio(msg.audio)} 
+  {#if showAudio}
+    <button
+      type="button"
+      class="play-audio-btn"
+      on:click={() => onPlayAudio?.(audioUrl)}
       aria-label="Play audio"
     >
       <span class="icon">▶️</span>
-      <span class="label">{msg.mittente === 'Io' ? (language === 'en' ? 'Voice' : 'Vocale') : (language === 'en' ? 'Listen' : 'Ascolta')}</span>
+      <span class="label">
+        {msg.mittente === 'Io'
+          ? (language === 'en' ? 'Voice' : 'Vocale')
+          : (language === 'en' ? 'Listen' : 'Ascolta')}
+      </span>
     </button>
   {/if}
 </div>
@@ -38,8 +47,7 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-    /* Assicura che la bolla non collassi se c'è solo il bottone */
-    align-self: flex-start; 
+    align-self: flex-start;
   }
 
   .bolla.io {
@@ -52,10 +60,6 @@
     background-color: #ffffff;
     align-self: flex-start;
     border-top-left-radius: 0;
-  }
-
-  .msg-text {
-    /* Stile standard per il testo */
   }
 
   .play-audio-btn {

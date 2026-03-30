@@ -1,133 +1,179 @@
 <script>
-  import { tick, afterUpdate } from "svelte";
-  import { apiStore, getAudioUrl } from "$lib";
-  import ChatMessage from "$lib/components/ChatMessage.svelte";
-  import ChatInput from "$lib/components/ChatInput.svelte";
-  import SettingsMenu from "$lib/components/SettingsMenu.svelte";
+  import { tick, onMount, onDestroy } from 'svelte';
+  import {
+    incomingMessages,
+    isBackendTyping,
+    connectionStatus,
+    sendText,
+    sendAudio,
+    consumeIncomingMessage
+  } from '$lib/stores.js';
+  import ChatMessage from '$lib/components/ChatMessage.svelte';
+  import ChatInput from '$lib/components/ChatInput.svelte';
+  import SettingsMenu from '$lib/components/SettingsMenu.svelte';
 
-  let language = 'it';
-
-  // --- cartella dei messaggi ---
-  let messaggi = [
+  let language = $state('it');
+  let messaggi = $state([
     {
-      testo:
-        language === 'en'
-          ? "Hi! I'm Anita — what would you like to talk about?"
-          : "Ciao! sono anita, di cosa vuoi parlare?",
+      testo: "Ciao! sono anita, di cosa vuoi parlare?",
       mittente: "AI",
     },
-  ];
-  
-  let isLoading = false;
-  let isRecording = false;
-  let mediaRecorder = null;
-  let mediaStream = null;
-  let chunks = [];
-  
-  // Riferimento al contenitore
+  ]);
+
+  let isRecording = $state(false);
+  let isSendingAudio = $state(false);
   let chatContainer;
 
-  async function inviaMessaggio(nuovoMessaggio) {
-    if (!nuovoMessaggio || isLoading) return;
+  // Sottoscrivi agli store del WebSocket
+  let backendTyping = $derived($isBackendTyping);
+  let status = $derived($connectionStatus);
+  let pendingMessages = $derived($incomingMessages);
 
-    messaggi = [...messaggi, { testo: nuovoMessaggio, mittente: "Io" }];
-    isLoading = true;
+  // Computa isLoading: vero solo durante invio audio
+  let isLoading = $derived(isSendingAudio);
 
-    await tick();
-    scrollToBottom();
+  // --- GESTIONE MESSAGGI IN ARRIVO ---
+  $effect(() => {
+    // Questa reazione si triggera quando pendingMessages cambia
+    const msgs = pendingMessages;
+    if (msgs.length === 0) return;
 
-    try {
-      const response = await apiStore.fetchData(messaggi, language);
+    // Prendi il primo messaggio e processalo
+    const incoming = msgs[0];
 
-      if (response?.type === 'audio' && response?.content) {
-        // Risposta audio dal server (es. comando "sample")
-        messaggi = [...messaggi, { testo: '', audio: response.content, mittente: 'AI' }];
-      } else {
-        const rispostaTesto = response?.response || response?.text || JSON.stringify(response);
-        messaggi = [...messaggi, { testo: rispostaTesto, mittente: "AI" }];
-      }
-      
-    } catch (err) {
-      console.error(err);
-      const errorMsg = language === 'en' ? "Connection error." : "Errore di connessione.";
-      messaggi = [...messaggi, { testo: errorMsg, mittente: "AI" }];
-    } finally {
-      isLoading = false;
-      await tick();
-      scrollToBottom();
+    const newMsg = {
+      mittente: 'AI',
+      testo: incoming.text || '',
+      audio: incoming.audio_bytes || null,
+      audio_format: incoming.audio_format || 'webm',
+    };
+
+    messaggi = [...messaggi, newMsg];
+    consumeIncomingMessage();
+
+    // Scroll dopo il render
+    tick().then(scrollToBottom);
+  });
+
+  // --- INVIO MESSAGGIO TESTO ---
+  function handleSendMessage(text) {
+    if (!text) return;
+
+    const sent = sendText(text, language);
+    if (sent) {
+      messaggi = [...messaggi, { testo: text, mittente: 'Io' }];
+      tick().then(scrollToBottom);
+    } else {
+      showError();
     }
   }
 
+  // --- REGISTRAZIONE AUDIO ---
+  let mediaRecorder = null;
+  let mediaStream = null;
+  let audioChunks = [];
+
   async function startRecording() {
-    if (isRecording || isLoading) return;
+    if (isRecording || isSendingAudio) return;
+
     try {
       mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaRecorder = new MediaRecorder(mediaStream);
-      chunks = [];
+      audioChunks = [];
 
       mediaRecorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) chunks.push(e.data);
+        if (e.data?.size > 0) audioChunks.push(e.data);
       };
 
-      mediaRecorder.onstop = async () => {
-        const blob = new Blob(chunks, { type: chunks[0]?.type || 'audio/webm' });
-        
-        // Creiamo un URL locale temporaneo per riascoltare subito l'audio
-        const localAudioUrl = URL.createObjectURL(blob);
-        
-        const file = new File([blob], `voice-${Date.now()}.webm`, { type: blob.type });
-
-        isLoading = true;
-        try {
-          const res = await apiStore.uploadAudio(file, language);
-
-          // MODIFICA QUI: Inseriamo il messaggio con TESTO VUOTO per mostrare solo il pulsante audio
-          // Non importa se c'è una trascrizione dal backend, la nascondiamo
-          messaggi = [...messaggi, { testo: "", audio: localAudioUrl, mittente: 'Io' }];
-          await tick();
-          
-          // Gestiamo la risposta AI se presente
-          if (res && res.response) {
-             messaggi = [...messaggi, { testo: res.response, mittente: 'AI' }];
-          }
-
-        } catch (err) {
-          console.error(err);
-          messaggi = [...messaggi, { testo: language === 'en' ? 'Audio error.' : 'Errore audio.', mittente: 'AI' }];
-        } finally {
-          isLoading = false;
-          if (mediaStream) {
-            mediaStream.getTracks().forEach(t => t.stop());
-            mediaStream = null;
-          }
-        }
+      mediaRecorder.onstop = handleRecordingComplete;
+      mediaRecorder.onerror = (e) => {
+        console.error('MediaRecorder error:', e);
+        cleanupRecording();
       };
 
       mediaRecorder.start();
       isRecording = true;
+
     } catch (err) {
-      console.error('Could not start recording', err);
+      console.error('Impossibile avviare registrazione:', err);
+      const errorMsg = language === 'en'
+        ? 'Microphone access denied.'
+        : 'Accesso al microfono negato.';
+      messaggi = [...messaggi, { testo: errorMsg, mittente: 'AI' }];
     }
   }
 
   function stopRecording() {
-    if (!isRecording) return;
+    if (!isRecording || !mediaRecorder) return;
+
     isRecording = false;
+
     try {
-      if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+      if (mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+      }
     } catch (e) {
-      console.error(e);
+      console.error('Errore stop recording:', e);
+      cleanupRecording();
     }
   }
 
-  function playAudio(source) {
-    try {
-      const url = getAudioUrl(source);
-      const audio = new Audio(url);
-      audio.play().catch(err => console.error('Audio play failed', err));
-    } catch (e) {
-      console.error('playAudio error', e);
+  async function handleRecordingComplete() {
+    if (audioChunks.length === 0) {
+      cleanupRecording();
+      return;
     }
+
+    const blob = new Blob(audioChunks, { type: audioChunks[0]?.type || 'audio/webm' });
+    const localAudioUrl = URL.createObjectURL(blob);
+
+    // Mostra immediatamente il messaggio vocale dell'utente
+    messaggi = [...messaggi, { testo: '', audio: localAudioUrl, mittente: 'Io' }];
+    await tick();
+    scrollToBottom();
+
+    // Invia al backend
+    isSendingAudio = true;
+
+    try {
+      const reader = new FileReader();
+      const base64Promise = new Promise((resolve, reject) => {
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+      });
+      reader.readAsDataURL(blob);
+
+      const base64 = await base64Promise;
+      const sent = sendAudio(base64, language);
+
+      if (!sent) {
+        showError();
+      }
+
+    } catch (err) {
+      console.error('Errore invio audio:', err);
+      showError();
+    } finally {
+      cleanupRecording();
+      isSendingAudio = false;
+    }
+  }
+
+  function cleanupRecording() {
+    if (mediaStream) {
+      mediaStream.getTracks().forEach(t => t.stop());
+      mediaStream = null;
+    }
+    mediaRecorder = null;
+    audioChunks = [];
+    isRecording = false;
+  }
+
+  // --- UTILITIES ---
+  function playAudio(url) {
+    if (!url) return;
+    const audio = new Audio(url);
+    audio.play().catch(err => console.error('Audio play failed:', err));
   }
 
   function scrollToBottom() {
@@ -136,42 +182,62 @@
     }
   }
 
-  afterUpdate(() => {
-    scrollToBottom();
-  });
+  function showError() {
+    const errorMsg = language === 'en'
+      ? 'Connection error. Try again.'
+      : 'Errore di connessione. Riprova.';
+    messaggi = [...messaggi, { testo: errorMsg, mittente: 'AI' }];
+  }
 
   function setLanguage(event) {
-    const l = event.detail;
-    language = l;
-    const confirmation = l === 'en' ? 'Language set to English.' : 'Lingua impostata su Italiano.';
-    messaggi = [...messaggi, { testo: confirmation, mittente: "AI" }];
+    language = event.detail;
+    const confirmation = language === 'en'
+      ? 'Language set to English.'
+      : 'Lingua impostata su Italiano.';
+    messaggi = [...messaggi, { testo: confirmation, mittente: 'AI' }];
+    tick().then(scrollToBottom);
   }
+
+  // Cleanup on destroy
+  onMount(() => {
+    return () => cleanupRecording();
+  });
 </script>
 
-<!-- STRUTTURA -->
 <main>
+  <!-- Indicatore connessione -->
+  {#if status !== 'connected'}
+    <div class="connection-bar {status === 'connecting' ? 'connecting' : 'error'}">
+      {status === 'connecting'
+        ? (language === 'en' ? 'Connecting...' : 'Connessione in corso...')
+        : (language === 'en' ? 'Disconnected - Reconnecting...' : 'Disconnesso - Riconnessione...')}
+    </div>
+  {/if}
+
   <div class="chat-container" bind:this={chatContainer}>
-    {#each messaggi as msg}
-      <ChatMessage {msg} {language} {playAudio} />
+    {#each messaggi as msg (msg)} <!-- Key unica per ottimizzazione -->
+      <ChatMessage {msg} {language} onPlayAudio={playAudio} />
     {/each}
   </div>
 
-  {#if isLoading}
-    <div class="typing">{language === 'en' ? "Assistant is typing..." : "L'assistente sta scrivendo..."}</div>
+  {#if backendTyping}
+    <div class="typing">
+      {language === 'en' ? 'Anita is typing...' : 'Anita sta scrivendo...'}
+    </div>
   {/if}
 
-  <ChatInput 
-    {language} 
-    {isLoading} 
+  <ChatInput
+    {language}
+    {isLoading}
     {isRecording}
-    on:sendMessage={(e) => inviaMessaggio(e.detail)}
-    on:startRecording={startRecording}
-    on:stopRecording={stopRecording}
+    onSendMessage={handleSendMessage}
+    onStartRecording={startRecording}
+    onStopRecording={stopRecording}
   >
     <div slot="settings">
-      <SettingsMenu 
-        {language} 
-        on:setLanguage={setLanguage} 
+      <SettingsMenu
+        {language}
+        on:setLanguage={setLanguage}
         on:selectTemplate={() => console.log('Template clicked')}
       />
     </div>
@@ -182,7 +248,7 @@
   :global(body) {
     margin: 0;
     padding: 0;
-    height: 100vh;
+    height: 100dvh; /* Dynamic viewport height per mobile */
     background-color: #d1d7db;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
       Helvetica, Arial, sans-serif;
@@ -194,11 +260,25 @@
     width: 100%;
     max-width: 500px;
     height: 100%;
+    height: 100dvh;
     background-color: #efeae2;
     display: flex;
     flex-direction: column;
     position: relative;
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+  }
+
+  .connection-bar {
+    padding: 8px 16px;
+    font-size: 12px;
+    text-align: center;
+    background-color: #fbbf24;
+    color: #92400e;
+  }
+
+  .connection-bar.error {
+    background-color: #fca5a5;
+    color: #991b1b;
   }
 
   .chat-container {
@@ -211,8 +291,8 @@
     background-color: #efeae2;
     background-image: url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png");
     background-blend-mode: overlay;
+    scroll-behavior: smooth;
   }
-
 
   .typing {
     font-size: 12px;
@@ -220,6 +300,24 @@
     margin-left: 20px;
     margin-bottom: 5px;
     font-style: italic;
-    height: 15px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .typing::before {
+    content: '';
+    display: inline-block;
+    width: 4px;
+    height: 4px;
+    background-color: #666;
+    border-radius: 50%;
+    animation: typingDot 1s infinite;
+  }
+
+  @keyframes typingDot {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 1; }
   }
 </style>

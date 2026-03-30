@@ -1,185 +1,177 @@
 import { writable } from 'svelte/store';
 import { getWsUrl } from '$lib/utils.js';
 
-const createApiStore = () => {
-  const initialState = {
-    data: null,
-    loading: false,
-    error: null,
-    connected: false // Nuovo stato per tracciare la connessione WS
-  };
+// --- STORES REATTIVI ---
+export const incomingMessages = writable([]);
+export const isBackendTyping = writable(false);
+export const connectionStatus = writable('disconnected'); // 'disconnected' | 'connecting' | 'connected'
 
-  const { subscribe, update, set } = writable(initialState);
+// --- STATE INTERNO ---
+let socket = null;
+let reconnectTimer = null;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_DELAY = 30000;
+const BASE_RECONNECT_DELAY = 1000;
 
-  let socket = null;
-  let reconnectTimer = null;
-  let messageResolver = null;
-  let messageRejecter = null;
-
-  // Funzione di connessione
-  const connect = () => {
+// --- CONNESSIONE ---
+function connect() {
     if (socket && (socket.readyState === WebSocket.CONNECTING || socket.readyState === WebSocket.OPEN)) {
-      return;
+        return;
     }
 
-    console.log("Tentativo di connessione WebSocket...");
-    
+    connectionStatus.set('connecting');
+
     try {
-      socket = new WebSocket(getWsUrl());
+        socket = new WebSocket(getWsUrl());
 
-      socket.onopen = () => {
-        console.log("WebSocket Connesso");
-        update(s => ({ ...s, error: null, connected: true, loading: false }));
-        // Pulisci eventuali timer di riconnessione pendenti
-        if (reconnectTimer) clearTimeout(reconnectTimer);
-      };
+        socket.onopen = () => {
+            console.log('[WS] Connesso');
+            connectionStatus.set('connected');
+            reconnectAttempts = 0;
+            if (reconnectTimer) {
+                clearTimeout(reconnectTimer);
+                reconnectTimer = null;
+            }
+        };
 
-      socket.onclose = (event) => {
-        console.log("WebSocket Disconnesso. Riconnessione tra 3 secondi...");
-        update(s => ({ ...s, connected: false, loading: false }));
+        socket.onclose = (event) => {
+            console.log('[WS] Disconnesso, codice:', event.code);
+            connectionStatus.set('disconnected');
+            isBackendTyping.set(false);
+            scheduleReconnect();
+        };
 
-        // Rigetta eventuali promise in attesa
-        if (messageRejecter) {
-          messageRejecter(new Error("WebSocket disconnesso durante la richiesta."));
-          messageResolver = null;
-          messageRejecter = null;
-        }
+        socket.onerror = (error) => {
+            console.error('[WS] Errore:', error);
+            connectionStatus.set('disconnected');
+            // Non chiamare socket.close() qui, onclose verrà chiamato automaticamente
+        };
 
-        if (reconnectTimer) clearTimeout(reconnectTimer);
-        reconnectTimer = setTimeout(connect, 3000);
-      };
-
-      socket.onerror = (error) => {
-        console.error("WebSocket Error:", error);
-        update(s => ({ ...s, error: "Errore di connessione WebSocket", connected: false }));
-
-        if (messageRejecter) {
-          messageRejecter(new Error("Errore WebSocket."));
-          messageResolver = null;
-          messageRejecter = null;
-        }
-
-        socket.close(); // Chiude per triggerare onclose e la riconnessione
-      };
-
-      socket.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          
-          // Aggiorna lo store con i dati ricevuti
-          update(s => ({ ...s, data: data, loading: false }));
-
-          // Se c'è una promise in attesa di risposta, la risolviamo
-          if (messageResolver) {
-            messageResolver(data);
-            messageResolver = null;
-            messageRejecter = null;
-          }
-        } catch (e) {
-          console.error("Errore parsing messaggio WS:", e);
-        }
-      };
+        socket.onmessage = (event) => {
+            handleMessage(event.data);
+        };
 
     } catch (e) {
-      console.error("Impossibile creare WebSocket", e);
-      // Fallback o riprova
-      if (reconnectTimer) clearTimeout(reconnectTimer);
-      reconnectTimer = setTimeout(connect, 3000);
+        console.error('[WS] Impossibile creare connessione:', e);
+        connectionStatus.set('disconnected');
+        scheduleReconnect();
     }
-  };
+}
 
-  // Avvia la connessione iniziale
-  connect();
+function scheduleReconnect() {
+    if (reconnectTimer) return;
 
-  return {
-    subscribe,
+    // Backoff esponenziale con jitter
+    const delay = Math.min(
+        BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts) + Math.random() * 1000,
+        MAX_RECONNECT_DELAY
+    );
+    reconnectAttempts++;
 
-    // Metodo per inviare messaggi di chat
-    fetchData: async (messaggi, language = 'it') => {
-      // Se non connesso, segnaliamo errore o attendiamo (qui segnaliamo errore per immediatezza)
-      if (!socket || socket.readyState !== WebSocket.OPEN) {
-        // Opzionale: potremmo aspettare che la connessione sia pronta, 
-        // ma per semplicità lanciamo un errore che l'UI può gestire.
-        // Nota: La riconnessione automatica è già attiva in background.
-        throw new Error("WebSocket non connesso. Riprova tra qualche istante.");
-      }
+    console.log(`[WS] Riconnessione tra ${Math.round(delay / 1000)}s (tentativo ${reconnectAttempts})`);
+    reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        connect();
+    }, delay);
+}
 
-      update(state => ({ ...state, loading: true, error: null }));
+function handleMessage(rawData) {
+    try {
+        const data = JSON.parse(rawData);
 
-      // Mappatura messaggi
-      const messages = messaggi.map(m => ({
-        role: m.mittente === "Io" ? "user" : "model",
-        content: m.testo
-      }));
-
-      const languageName = language === 'en' ? 'English' : (language === 'it' ? 'Italiano' : language);
-
-      const payload = {
-        type: 'chat', // Identificativo per il backend
-        messages: messages,
-        language: languageName
-      };
-
-      return new Promise((resolve, reject) => {
-        try {
-          console.log(payload)
-          socket.send(JSON.stringify(payload));
-          messageResolver = resolve;
-          messageRejecter = reject;
-        } catch (err) {
-          update(state => ({ ...state, error: err.message, loading: false }));
-          reject(err);
+        // Messaggio di "sta scrivendo"
+        if (typeof data.typing === 'boolean') {
+            isBackendTyping.set(data.typing);
+            return;
         }
-      });
-    },
 
-    // Metodo per inviare file audio (convertito in Base64 per WS)
-    uploadAudio: async (file, language = 'it') => {
-      if (!socket || socket.readyState !== WebSocket.OPEN) {
-         throw new Error("WebSocket non connesso.");
-      }
+        // Messaggio con contenuto
+        if (data.text || data.audio_bytes) {
+            // Quando arriva un messaggio reale, il typing finisce
+            isBackendTyping.set(false);
+            incomingMessages.update(messages => [...messages, data]);
+        }
 
-      update(state => ({ ...state, loading: true, error: null }));
+    } catch (e) {
+        console.error('[WS] Errore parsing JSON:', e, rawData);
+    }
+}
 
-      // Leggiamo il file come DataURL (Base64)
-      const reader = new FileReader();
-      
-      return new Promise((resolve, reject) => {
-        reader.onload = () => {
-          const base64Audio = reader.result; // "data:audio/webm;base64,......"
-          
-          const payload = {
-            type: 'audio', // Identificativo per il backend
-            content: base64Audio,
-            filename: file.name || `voice-${Date.now()}.webm`,
-            language: language
-          };
+// --- API PUBBLICA ---
 
-          try {
-            console.log(payload)
-            socket.send(JSON.stringify(payload));
-            messageResolver = resolve;
-            messageRejecter = reject;
-          } catch (err) {
-            update(state => ({ ...state, error: err.message, loading: false }));
-            reject(err);
-          }
-        };
+/**
+ * Invia un messaggio di testo
+ * @returns {boolean} true se inviato con successo
+ */
+export function sendText(text, language) {
+    if (!isSocketReady()) return false;
 
-        reader.onerror = (err) => {
-          update(state => ({ ...state, error: "Lettura file fallita", loading: false }));
-          reject(err);
-        };
+    const payload = {
+        language,
+        text,
+        audio_bytes: null
+    };
 
-        reader.readAsDataURL(file);
-      });
-    },
+    socket.send(JSON.stringify(payload));
+    return true;
+}
 
-    reset: () => set(initialState),
-    
-    // Utility per controllare lo stato
-    isConnected: () => socket && socket.readyState === WebSocket.OPEN
-  };
-};
+/**
+ * Invia audio come base64 (può includere o meno il prefisso data:)
+ * @returns {boolean} true se inviato con successo
+ */
+export function sendAudio(base64Audio, language) {
+    if (!isSocketReady()) return false;
 
-export const apiStore = createApiStore();
+    // Pulisci il prefisso data: se presente - il backend vuole solo il base64 puro
+    const cleanBase64 = base64Audio.includes(',')
+        ? base64Audio.split(',')[1]
+        : base64Audio;
+
+    const payload = {
+        language,
+        text: null,
+        audio_bytes: cleanBase64
+    };
+
+    socket.send(JSON.stringify(payload));
+    return true;
+}
+
+/**
+ * Consuma il primo messaggio in coda (da chiamare dopo averlo processato)
+ */
+export function consumeIncomingMessage() {
+    incomingMessages.update(messages => messages.slice(1));
+}
+
+/**
+ * Consuma tutti i messaggi in coda
+ */
+export function consumeAllIncomingMessages() {
+    incomingMessages.set([]);
+}
+
+/**
+ * Forza la riconnessione
+ */
+export function forceReconnect() {
+    if (socket) {
+        socket.onclose = null; // Evita schedulazione automatica
+        socket.close();
+    }
+    reconnectAttempts = 0;
+    connect();
+}
+
+// --- HELPERS ---
+function isSocketReady() {
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+        console.warn('[WS] Impossibile inviare: socket non pronto');
+        return false;
+    }
+    return true;
+}
+
+// --- INIT ---
+connect();
