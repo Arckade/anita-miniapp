@@ -261,7 +261,9 @@
     max-width: 500px;
     height: 100%;
     height: 100dvh;
-    background-color: #efeae2;
+    background-image: url("/_immaginesfondo.png");
+    background-size: cover;
+    background-position: center;
     display: flex;
     flex-direction: column;
     position: relative;
@@ -288,9 +290,7 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
-    background-color: #efeae2;
-    background-image: url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png");
-    background-blend-mode: overlay;
+    background: transparent;
     scroll-behavior: smooth;
   }
 

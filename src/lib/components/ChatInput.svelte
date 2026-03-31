@@ -108,22 +108,37 @@
 
 <style>
   form {
-    padding: 10px;
-    background-color: #f0f2f5;
+    padding: 10px 14px;
+    margin: 8px 12px 12px;
+    background-color: rgba(15, 5, 30, 0.45);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     display: flex;
     gap: 10px;
-    border-top: 1px solid #ddd;
+    border-radius: 30px;
     align-items: center;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), 0 0 30px rgba(80, 0, 120, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.05);
   }
 
   input {
     flex: 1;
-    padding: 12px 15px;
+    padding: 10px 15px;
     border-radius: 20px;
-    border: none;
+    border: 2px solid transparent;
     outline: none;
-    background-color: #ffffff;
+    background-color: #2e2e3e;
+    color: #ffffff;
     font-size: 16px; /* Previenne zoom su iOS */
+    transition: border-color 0.2s;
+  }
+
+  input:focus {
+    border-color: #7c3aed;
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.25);
+  }
+
+  input::placeholder {
+    color: #888;
   }
 
   .hybrid-button {
@@ -151,7 +166,7 @@
   }
 
   .hybrid-button.is-mic {
-    background-color: #54656f;
+    background-color: #6b21a8;
   }
 
   .hybrid-button.is-mic:active:not(:disabled) {
@@ -160,7 +175,7 @@
   }
 
   .hybrid-button.has-text {
-    background-color: #008069;
+    background-color: #7c3aed;
   }
 
   .hybrid-button.recording {

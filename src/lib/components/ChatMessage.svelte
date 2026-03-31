@@ -51,13 +51,15 @@
   }
 
   .bolla.io {
-    background-color: #d9fdd3;
+    background-color: #4a235a;
+    color: #ffffff;
     align-self: flex-end;
     border-top-right-radius: 0;
   }
 
   .bolla.ai {
-    background-color: #ffffff;
+    background-color: #2e2e2e;
+    color: #ffffff;
     align-self: flex-start;
     border-top-left-radius: 0;
   }
