@@ -170,12 +170,6 @@
   }
 
   // --- UTILITIES ---
-  function playAudio(url) {
-    if (!url) return;
-    const audio = new Audio(url);
-    audio.play().catch(err => console.error('Audio play failed:', err));
-  }
-
   function scrollToBottom() {
     if (chatContainer) {
       chatContainer.scrollTop = chatContainer.scrollHeight;
@@ -216,7 +210,7 @@
 
   <div class="chat-container" bind:this={chatContainer}>
     {#each messaggi as msg (msg)} <!-- Key unica per ottimizzazione -->
-      <ChatMessage {msg} {language} onPlayAudio={playAudio} />
+      <ChatMessage {msg} {language} />
     {/each}
   </div>
 

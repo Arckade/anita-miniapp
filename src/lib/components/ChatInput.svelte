@@ -110,14 +110,15 @@
   form {
     padding: 10px 14px;
     margin: 8px 12px 12px;
-    background-color: rgba(15, 5, 30, 0.45);
+    background-color: rgba(22, 7, 46, 0.55);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     display: flex;
     gap: 10px;
     border-radius: 30px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
     align-items: center;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), 0 0 30px rgba(80, 0, 120, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
   }
 
   input {
@@ -126,7 +127,7 @@
     border-radius: 20px;
     border: 2px solid transparent;
     outline: none;
-    background-color: #2e2e3e;
+    background-color: rgba(46, 46, 62, 0.55);
     color: #ffffff;
     font-size: 16px; /* Previenne zoom su iOS */
     transition: border-color 0.2s;
@@ -134,7 +135,7 @@
 
   input:focus {
     border-color: #7c3aed;
-    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.25);
+    box-shadow: none;
   }
 
   input::placeholder {

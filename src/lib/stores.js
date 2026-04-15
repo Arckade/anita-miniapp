@@ -6,6 +6,18 @@ export const incomingMessages = writable([]);
 export const isBackendTyping = writable(false);
 export const connectionStatus = writable('disconnected'); // 'disconnected' | 'connecting' | 'connected'
 
+// Tenda testo AI: true = testo visibile, false = nascosto
+const SHOW_AI_TEXT_KEY = 'anita_show_ai_text';
+const _savedShowAiText = typeof localStorage !== 'undefined'
+  ? localStorage.getItem(SHOW_AI_TEXT_KEY)
+  : null;
+export const showAiText = writable(_savedShowAiText === null ? true : _savedShowAiText === 'true');
+showAiText.subscribe(val => {
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem(SHOW_AI_TEXT_KEY, String(val));
+  }
+});
+
 // --- STATE INTERNO ---
 let socket = null;
 let reconnectTimer = null;
