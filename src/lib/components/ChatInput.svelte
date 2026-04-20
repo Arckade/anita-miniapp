@@ -110,7 +110,7 @@
   form {
     padding: 10px 14px;
     margin: 8px 12px 12px;
-    background-color: rgba(22, 7, 46, 0.55);
+    background-color: rgba(64, 63, 65, 0.55); /* per cambiare il colore dellabarra sotto */
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     display: flex;
@@ -127,15 +127,15 @@
     border-radius: 20px;
     border: 2px solid transparent;
     outline: none;
-    background-color: rgba(46, 46, 62, 0.55);
+    background-color: rgba(75, 75, 90, 0.55); /* per cambiare il colore dellabarra di scrittura */
     color: #ffffff;
     font-size: 16px; /* Previenne zoom su iOS */
     transition: border-color 0.2s;
   }
 
   input:focus {
-    border-color: #7c3aed;
-    box-shadow: none;
+    border-color: #b0b0b0;
+    box-shadow: 0 0 8px rgba(176, 176, 176, 0.3);
   }
 
   input::placeholder {

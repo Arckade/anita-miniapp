@@ -6,13 +6,12 @@
     connectionStatus,
     sendText,
     sendAudio,
-    consumeIncomingMessage
+    consumeIncomingMessage,
+    language
   } from '$lib/stores.js';
   import ChatMessage from '$lib/components/ChatMessage.svelte';
   import ChatInput from '$lib/components/ChatInput.svelte';
   import SettingsMenu from '$lib/components/SettingsMenu.svelte';
-
-  let language = $state('it');
   let messaggi = $state([
     {
       testo: "Ciao! sono anita, di cosa vuoi parlare?",
@@ -96,7 +95,7 @@
 
     } catch (err) {
       console.error('Impossibile avviare registrazione:', err);
-      const errorMsg = language === 'en'
+      const errorMsg = $language === 'en'
         ? 'Microphone access denied.'
         : 'Accesso al microfono negato.';
       messaggi = [...messaggi, { testo: errorMsg, mittente: 'AI' }];
@@ -144,7 +143,7 @@
       reader.readAsDataURL(blob);
 
       const base64 = await base64Promise;
-      const sent = sendAudio(base64, language);
+      const sent = sendAudio(base64, $language);
 
       if (!sent) {
         showError();
@@ -177,20 +176,13 @@
   }
 
   function showError() {
-    const errorMsg = language === 'en'
+    const errorMsg = $language === 'en'
       ? 'Connection error. Try again.'
       : 'Errore di connessione. Riprova.';
     messaggi = [...messaggi, { testo: errorMsg, mittente: 'AI' }];
   }
 
-  function setLanguage(event) {
-    language = event.detail;
-    const confirmation = language === 'en'
-      ? 'Language set to English.'
-      : 'Lingua impostata su Italiano.';
-    messaggi = [...messaggi, { testo: confirmation, mittente: 'AI' }];
-    tick().then(scrollToBottom);
-  }
+
 
   // Cleanup on destroy
   onMount(() => {
@@ -203,25 +195,25 @@
   {#if status !== 'connected'}
     <div class="connection-bar {status === 'connecting' ? 'connecting' : 'error'}">
       {status === 'connecting'
-        ? (language === 'en' ? 'Connecting...' : 'Connessione in corso...')
-        : (language === 'en' ? 'Disconnected - Reconnecting...' : 'Disconnesso - Riconnessione...')}
+        ? ($language === 'en' ? 'Connecting...' : 'Connessione in corso...')
+        : ($language === 'en' ? 'Disconnected - Reconnecting...' : 'Disconnesso - Riconnessione...')}
     </div>
   {/if}
 
   <div class="chat-container" bind:this={chatContainer}>
     {#each messaggi as msg (msg)} <!-- Key unica per ottimizzazione -->
-      <ChatMessage {msg} {language} />
+      <ChatMessage {msg} language={$language} />
     {/each}
   </div>
 
   {#if backendTyping}
     <div class="typing">
-      {language === 'en' ? 'Anita is typing...' : 'Anita sta scrivendo...'}
+      {$language === 'en' ? 'Anita is typing...' : 'Anita sta scrivendo...'}
     </div>
   {/if}
 
   <ChatInput
-    {language}
+    language={$language}
     {isLoading}
     {isRecording}
     onSendMessage={handleSendMessage}
@@ -230,8 +222,6 @@
   >
     <div slot="settings">
       <SettingsMenu
-        {language}
-        on:setLanguage={setLanguage}
         on:selectTemplate={() => console.log('Template clicked')}
       />
     </div>

@@ -6,6 +6,18 @@ export const incomingMessages = writable([]);
 export const isBackendTyping = writable(false);
 export const connectionStatus = writable('disconnected'); // 'disconnected' | 'connecting' | 'connected'
 
+// Lingua (persiste in localStorage)
+const LANGUAGE_KEY = 'anita_language';
+const _savedLanguage = typeof localStorage !== 'undefined'
+  ? localStorage.getItem(LANGUAGE_KEY)
+  : null;
+export const language = writable(_savedLanguage || 'it');
+language.subscribe(val => {
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem(LANGUAGE_KEY, val);
+  }
+});
+
 // Tenda testo AI: true = testo visibile, false = nascosto
 const SHOW_AI_TEXT_KEY = 'anita_show_ai_text';
 const _savedShowAiText = typeof localStorage !== 'undefined'

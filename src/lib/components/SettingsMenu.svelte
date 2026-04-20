@@ -1,34 +1,22 @@
 <script>
-  import { createEventDispatcher } from 'svelte';
-  
-  export let language;
-  
-  const dispatch = createEventDispatcher();
+  import { goto } from '$app/navigation';
+  import { language } from '$lib/stores.js';
+
   let showMenu = false;
-  let showLangOptions = false;
 
   function toggleMenu() {
     showMenu = !showMenu;
   }
 
-  function selectLanguage() {
-    showLangOptions = !showLangOptions;
-  }
-
-  function setLanguage(l) {
-    dispatch('setLanguage', l);
-    showLangOptions = false;
+  function openLanguageSettings() {
     showMenu = false;
+    goto('/settings');
   }
 
   function selectTemplate() {
     showMenu = false;
-    dispatch('selectTemplate');
+    // TODO: implementare selezione template
   }
-
-  // Close menu when clicking outside (handled if we rely on parent's click handler, 
-  // or we can add a window click listener here, but let's keep it simple and emit close)
-  // For now, let's keep the logic simple
 </script>
 
 <div class="settings-container" on:click|stopPropagation>
@@ -43,21 +31,9 @@
 
   {#if showMenu}
     <div class="settings-menu" on:click|stopPropagation>
-      <button type="button" class="menu-item" on:click={selectLanguage}>
-        {language === 'en' ? 'Language' : 'Lingua'}
+      <button type="button" class="menu-item" on:click={openLanguageSettings}>
+        {$language === 'en' ? 'Language' : 'Lingua'}
       </button>
-
-      {#if showLangOptions}
-        <div class="lang-options">
-          <button type="button" class="menu-item" on:click={() => setLanguage('it')}>
-            Italiano
-          </button>
-          <button type="button" class="menu-item" on:click={() => setLanguage('en')}>
-            English
-          </button>
-        </div>
-      {/if}
-
       <button type="button" class="menu-item" on:click={selectTemplate}>
         template
       </button>
@@ -65,7 +41,7 @@
   {/if}
 </div>
 
-<svelte:window on:click={() => { showMenu = false; showLangOptions = false; }} />
+<svelte:window on:click={() => { showMenu = false; }} />
 
 <style>
   .settings-container {
@@ -115,12 +91,5 @@
 
   .menu-item:hover {
     background: #f3f4f6;
-  }
-
-  .lang-options {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding-left: 20px;
   }
 </style>
