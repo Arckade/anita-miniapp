@@ -47,11 +47,11 @@
   });
 </script>
 
-<div class="bolla {msg.mittente === 'Io' ? 'io' : 'ai'}">
+<div class="flex flex-col gap-2 p-3.75 py-2.5 rounded-lg max-w-3/4 text-sm leading-relaxed relative break-words shadow-sm whitespace-pre-wrap text-white {msg.mittente === 'Io' ? 'self-end bg-purple-900 rounded-tr-none rounded-tl-lg' : 'self-start bg-gray-800 rounded-tl-none'}">
   {#if showAudio}
     <button
       type="button"
-      class="play-audio-btn {isPlaying ? 'playing' : ''}"
+      class="inline-flex w-9 h-9 rounded-full p-0 cursor-pointer items-center justify-center text-white transition-all duration-200 flex-shrink-0 bg-gray-500/35 hover:bg-white/55 active:scale-95 {isPlaying ? 'bg-white/45' : ''} {msg.mittente === 'Io' ? 'order-2' : ''}"
       on:click={toggleAudio}
       aria-label={isPlaying ? 'Pause audio' : 'Play audio'}
     >
@@ -73,7 +73,7 @@
   {#if isAi && showText}
     <button
       type="button"
-      class="text-toggle-btn"
+      class="inline-flex self-start bg-white/12 border-none rounded-xl px-2.5 py-1 cursor-pointer items-center gap-1.5 text-white/75 text-xs font-medium transition-colors duration-200 hover:bg-white/22 hover:text-white"
       on:click={toggleAiText}
       aria-label={$showAiText ? 'Nascondi testo' : 'Mostra testo'}
     >
@@ -93,103 +93,26 @@
       <span>{$showAiText ? (language === 'en' ? 'Hide text' : 'Nascondi testo') : (language === 'en' ? 'Show text' : 'Mostra testo')}</span>
     </button>
     {#if $showAiText}
-      <div class="msg-text ai-text">{msg.testo}</div>
+      <div class="animate-fadeIn">{msg.testo}</div>
     {/if}
   {:else if showText}
-    <div class="msg-text">{msg.testo}</div>
+    <div>{msg.testo}</div>
   {/if}
 </div>
 
 <style>
-  .bolla {
-    padding: 10px 15px;
-    border-radius: 8px;
-    max-width: 75%;
-    font-size: 15px;
-    line-height: 1.4;
-    position: relative;
-    word-wrap: break-word;
-    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
-    white-space: pre-wrap;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    align-self: flex-start;
-  }
-
-  .bolla.io {
-    background-color: #4a235a;
-    color: #ffffff;
-    align-self: flex-end;
-    border-top-right-radius: 0;
-  }
-
-  .bolla.ai {
-    background-color: #2e2e2e;
-    color: #ffffff;
-    align-self: flex-start;
-    border-top-left-radius: 0;
-  }
-
-  .play-audio-btn {
-    background: rgba(99, 93, 93, 0.35);
-    border: none;
-    border-radius: 50%;
-    width: 36px;
-    height: 36px;
-    padding: 0;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: #ffffff;
-    transition: background 0.2s, transform 0.1s;
-    flex-shrink: 0;
-  }
-
-  .play-audio-btn:hover {
-    background: rgba(255, 255, 255, 0.55);
-  }
-
-  .play-audio-btn:active {
-    transform: scale(0.92);
-  }
-
-  .play-audio-btn.playing {
-    background: rgba(255, 255, 255, 0.45);
-  }
-
-  .bolla.io .play-audio-btn {
-    order: 2;
-  }
-
-  .text-toggle-btn {
-    background: rgba(255, 255, 255, 0.12);
-    border: none;
-    border-radius: 12px;
-    padding: 4px 10px;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    color: rgba(255, 255, 255, 0.75);
-    font-size: 12px;
-    font-weight: 500;
-    transition: background 0.2s;
-    align-self: flex-start;
-  }
-
-  .text-toggle-btn:hover {
-    background: rgba(255, 255, 255, 0.22);
-    color: #fff;
-  }
-
-  .ai-text {
-    animation: fadeIn 0.2s ease;
-  }
-
   @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(-4px); }
-    to   { opacity: 1; transform: translateY(0); }
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  :global(.animate-fadeIn) {
+    animation: fadeIn 0.2s ease forwards;
   }
 </style>

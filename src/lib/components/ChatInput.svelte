@@ -62,7 +62,7 @@
   });
 </script>
 
-<form on:submit|preventDefault={submitMessage}>
+<form class="px-3.5 py-2.5 mx-3 my-2 mb-3 bg-gray-700/55 backdrop-blur-md flex gap-2.5 rounded-full border border-white/15 items-center shadow-2xl" on:submit|preventDefault={submitMessage}>
   <slot name="settings"></slot>
 
   <input
@@ -71,11 +71,12 @@
     placeholder={language === 'en' ? 'Write a message...' : 'Scrivi un messaggio...'}
     bind:value={nuovoMessaggio}
     disabled={isLoading}
+    class="flex-1 px-4 py-2.5 rounded-2xl border-2 border-transparent outline-none bg-gray-800/55 text-white text-base transition-all duration-200 placeholder-gray-500 focus:border-gray-400 focus:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
   />
 
   <button
     type="button"
-    class="hybrid-button {nuovoMessaggio.trim() ? 'has-text' : 'is-mic'} {isRecording ? 'recording' : ''}"
+    class="w-11 h-11 rounded-full border-none cursor-pointer flex items-center justify-center text-white transition-all duration-200 flex-shrink-0 {nuovoMessaggio.trim() ? 'bg-purple-600 hover:bg-purple-700' : 'bg-purple-900 hover:bg-purple-800'} {isRecording ? 'bg-red-700 animate-pulse' : ''} active:scale-95 disabled:bg-gray-300 disabled:cursor-not-allowed disabled:opacity-70"
     disabled={isLoading}
     on:click={submitMessage}
     on:mousedown={handleMicPress}
@@ -105,87 +106,3 @@
     {/if}
   </button>
 </form>
-
-<style>
-  form {
-    padding: 10px 14px;
-    margin: 8px 12px 12px;
-    background-color: rgba(64, 63, 65, 0.55); /* per cambiare il colore dellabarra sotto */
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    display: flex;
-    gap: 10px;
-    border-radius: 30px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    align-items: center;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-  }
-
-  input {
-    flex: 1;
-    padding: 10px 15px;
-    border-radius: 20px;
-    border: 2px solid transparent;
-    outline: none;
-    background-color: rgba(75, 75, 90, 0.55); /* per cambiare il colore dellabarra di scrittura */
-    color: #ffffff;
-    font-size: 16px; /* Previenne zoom su iOS */
-    transition: border-color 0.2s;
-  }
-
-  input:focus {
-    border-color: #b0b0b0;
-    box-shadow: 0 0 8px rgba(176, 176, 176, 0.3);
-  }
-
-  input::placeholder {
-    color: #888;
-  }
-
-  .hybrid-button {
-    width: 45px;
-    height: 45px;
-    min-width: 45px;
-    border-radius: 50%;
-    border: none;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: transform 0.1s, background-color 0.2s;
-    color: white;
-  }
-
-  .hybrid-button:active:not(:disabled) {
-    transform: scale(0.95);
-  }
-
-  .hybrid-button:disabled {
-    background-color: #ccc;
-    cursor: not-allowed;
-    opacity: 0.7;
-  }
-
-  .hybrid-button.is-mic {
-    background-color: #6b21a8;
-  }
-
-  .hybrid-button.is-mic:active:not(:disabled) {
-    background-color: #b91c1c;
-    transform: scale(1.1);
-  }
-
-  .hybrid-button.has-text {
-    background-color: #7c3aed;
-  }
-
-  .hybrid-button.recording {
-    background-color: #b91c1c;
-    animation: pulse 1s infinite;
-  }
-
-  @keyframes pulse {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.05); }
-  }
-</style>

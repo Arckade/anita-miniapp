@@ -58,7 +58,7 @@
   function handleSendMessage(text) {
     if (!text) return;
 
-    const sent = sendText(text, language);
+    const sent = sendText(text, $language);
     if (sent) {
       messaggi = [...messaggi, { testo: text, mittente: 'Io' }];
       tick().then(scrollToBottom);

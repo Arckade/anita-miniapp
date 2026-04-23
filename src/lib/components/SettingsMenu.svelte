@@ -19,10 +19,10 @@
   }
 </script>
 
-<div class="settings-container" on:click|stopPropagation>
+<div class="relative flex items-center" on:click|stopPropagation>
   <button
     type="button"
-    class="settings-button"
+    class="bg-transparent border-none cursor-pointer text-lg mr-1.5 w-9 h-9 flex items-center justify-center text-gray-700 hover:opacity-80 transition-opacity"
     aria-label="Settings"
     on:click={toggleMenu}
   >
@@ -30,11 +30,11 @@
   </button>
 
   {#if showMenu}
-    <div class="settings-menu" on:click|stopPropagation>
-      <button type="button" class="menu-item" on:click={openLanguageSettings}>
+    <div class="absolute bottom-12 left-0 bg-white border border-gray-200 rounded-lg shadow-lg flex flex-col p-1.5 min-w-32 z-30" on:click|stopPropagation>
+      <button type="button" class="bg-transparent border-none px-3 py-2 text-center cursor-pointer rounded text-gray-800 hover:bg-gray-100 transition-colors" on:click={openLanguageSettings}>
         {$language === 'en' ? 'Language' : 'Lingua'}
       </button>
-      <button type="button" class="menu-item" on:click={selectTemplate}>
+      <button type="button" class="bg-transparent border-none px-3 py-2 text-center cursor-pointer rounded text-gray-800 hover:bg-gray-100 transition-colors" on:click={selectTemplate}>
         template
       </button>
     </div>
@@ -42,54 +42,3 @@
 </div>
 
 <svelte:window on:click={() => { showMenu = false; }} />
-
-<style>
-  .settings-container {
-    position: relative;
-    display: flex;
-    align-items: center;
-  }
-
-  .settings-button {
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    font-size: 18px;
-    margin-right: 6px;
-    width: 36px;
-    height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #54656f;
-  }
-
-  .settings-menu {
-    position: absolute;
-    bottom: 50px;
-    left: 0;
-    background: white;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
-    display: flex;
-    flex-direction: column;
-    padding: 6px;
-    min-width: 120px;
-    z-index: 30;
-  }
-
-  .menu-item {
-    background: transparent;
-    border: none;
-    padding: 8px 12px;
-    text-align: center;
-    cursor: pointer;
-    border-radius: 6px;
-    color: #333;
-  }
-
-  .menu-item:hover {
-    background: #f3f4f6;
-  }
-</style>
