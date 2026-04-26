@@ -19,7 +19,7 @@
   }
 </script>
 
-<div class="relative flex items-center" on:click|stopPropagation>
+<div class="relative flex items-center" role="presentation" on:click|stopPropagation on:keydown|stopPropagation>
   <button
     type="button"
     class="bg-transparent border-none cursor-pointer text-lg mr-1.5 w-9 h-9 flex items-center justify-center text-gray-700 hover:opacity-80 transition-opacity"
@@ -30,7 +30,7 @@
   </button>
 
   {#if showMenu}
-    <div class="absolute bottom-12 left-0 bg-white border border-gray-200 rounded-lg shadow-lg flex flex-col p-1.5 min-w-32 z-30" on:click|stopPropagation>
+    <div class="absolute bottom-12 left-0 bg-white border border-gray-200 rounded-lg shadow-lg flex flex-col p-1.5 min-w-32 z-30" role="presentation" on:click|stopPropagation on:keydown|stopPropagation>
       <button type="button" class="bg-transparent border-none px-3 py-2 text-center cursor-pointer rounded text-gray-800 hover:bg-gray-100 transition-colors" on:click={openLanguageSettings}>
         {$language === 'en' ? 'Language' : 'Lingua'}
       </button>
