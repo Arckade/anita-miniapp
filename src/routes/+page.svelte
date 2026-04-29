@@ -276,6 +276,13 @@
     gap: 10px;
     background: transparent;
     scroll-behavior: smooth;
+    /* Nascondi scrollbar */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .chat-container::-webkit-scrollbar {
+    display: none;
   }
 
   .typing {
