@@ -1,10 +1,109 @@
 import { writable } from 'svelte/store';
-import { getWsUrl } from '$lib/utils.js';
+import { getWsUrl, getBackendUrl } from '$lib/utils.js';
 
 // --- STORES REATTIVI ---
 export const incomingMessages = writable([]);
 export const isBackendTyping = writable(false);
 export const connectionStatus = writable('disconnected'); // 'disconnected' | 'connecting' | 'connected'
+
+// Lingua (persiste in localStorage)
+const LANGUAGE_KEY = 'anita_language';
+const _savedLanguage = typeof localStorage !== 'undefined'
+  ? localStorage.getItem(LANGUAGE_KEY)
+  : null;
+export const language = writable(_savedLanguage || 'it');
+language.subscribe(val => {
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem(LANGUAGE_KEY, val);
+  }
+});
+
+// Tenda testo AI: true = testo visibile, false = nascosto
+const SHOW_AI_TEXT_KEY = 'anita_show_ai_text';
+const _savedShowAiText = typeof localStorage !== 'undefined'
+  ? localStorage.getItem(SHOW_AI_TEXT_KEY)
+  : null;
+export const showAiText = writable(_savedShowAiText === null ? true : _savedShowAiText === 'true');
+showAiText.subscribe(val => {
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem(SHOW_AI_TEXT_KEY, String(val));
+  }
+});
+
+// Lingue (lingua madre e lingua da imparare)
+const NATIVE_LANGUAGE_KEY = 'anita_native_language';
+const TARGET_LANGUAGE_KEY = 'anita_target_language';
+const _savedNativeLanguage = typeof localStorage !== 'undefined'
+  ? localStorage.getItem(NATIVE_LANGUAGE_KEY)
+  : null;
+const _savedTargetLanguage = typeof localStorage !== 'undefined'
+  ? localStorage.getItem(TARGET_LANGUAGE_KEY)
+  : null;
+export const nativeLanguage = writable(_savedNativeLanguage || 'it');
+export const targetLanguage = writable(_savedTargetLanguage || 'en');
+
+nativeLanguage.subscribe(val => {
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem(NATIVE_LANGUAGE_KEY, val);
+  }
+});
+
+targetLanguage.subscribe(val => {
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem(TARGET_LANGUAGE_KEY, val);
+  }
+});
+
+export async function loadSupportedLanguages() {
+  const backend = getBackendUrl();
+  const response = await fetch(`${backend}/settings/supported-languages`);
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Failed to load languages: ${response.status} ${body}`);
+  }
+
+  const data = await response.json();
+  return data;
+}
+
+export async function loadLanguageSettings() {
+  const backend = getBackendUrl();
+  const response = await fetch(`${backend}/settings/language`);
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Failed to load languages: ${response.status} ${body}`);
+  }
+
+  const data = await response.json();
+  nativeLanguage.set(data.native_language || 'it');
+  targetLanguage.set(data.target_language || 'en');
+  return data;
+}
+
+export async function saveLanguageSettings(native, target) {
+  const backend = getBackendUrl();
+  const response = await fetch(`${backend}/settings/language`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      type: 'language',
+      native_language: native,
+      target_language: target
+    })
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Failed to save languages: ${response.status} ${body}`);
+  }
+
+  const data = await response.json();
+  nativeLanguage.set(data.native_language || native);
+  targetLanguage.set(data.target_language || target);
+  return data;
+}
 
 // --- STATE INTERNO ---
 let socket = null;
@@ -107,9 +206,8 @@ export function sendText(text, language) {
     if (!isSocketReady()) return false;
 
     const payload = {
-        language,
+        type: 'text',
         text,
-        audio_bytes: null
     };
 
     socket.send(JSON.stringify(payload));
@@ -129,8 +227,7 @@ export function sendAudio(base64Audio, language) {
         : base64Audio;
 
     const payload = {
-        language,
-        text: null,
+        type: 'audio',
         audio_bytes: cleanBase64
     };
 

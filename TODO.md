@@ -1,0 +1,1 @@
+lingue dinamiche + scrolling

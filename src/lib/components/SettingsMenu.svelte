@@ -1,40 +1,33 @@
 <script>
-  import { createEventDispatcher } from 'svelte';
-  
-  export let language;
-  
-  const dispatch = createEventDispatcher();
+  import { language } from '$lib/stores.js';
+  import LanguageModal from '$lib/components/LanguageModal.svelte';
+
   let showMenu = false;
-  let showLangOptions = false;
+  let showLanguageModal = false;
 
   function toggleMenu() {
     showMenu = !showMenu;
   }
 
-  function selectLanguage() {
-    showLangOptions = !showLangOptions;
+  function openLanguageSettings() {
+    showLanguageModal = true;
+    showMenu = false;
   }
 
-  function setLanguage(l) {
-    dispatch('setLanguage', l);
-    showLangOptions = false;
-    showMenu = false;
+  function closeLanguageModal() {
+    showLanguageModal = false;
   }
 
   function selectTemplate() {
     showMenu = false;
-    dispatch('selectTemplate');
+    // TODO: implementare selezione template
   }
-
-  // Close menu when clicking outside (handled if we rely on parent's click handler, 
-  // or we can add a window click listener here, but let's keep it simple and emit close)
-  // For now, let's keep the logic simple
 </script>
 
-<div class="settings-container" on:click|stopPropagation>
+<div class="relative flex items-center" role="presentation" on:click|stopPropagation on:keydown|stopPropagation>
   <button
     type="button"
-    class="settings-button"
+    class="bg-transparent border-none cursor-pointer text-lg mr-1.5 w-9 h-9 flex items-center justify-center text-gray-700 hover:opacity-80 transition-opacity"
     aria-label="Settings"
     on:click={toggleMenu}
   >
@@ -42,85 +35,19 @@
   </button>
 
   {#if showMenu}
-    <div class="settings-menu" on:click|stopPropagation>
-      <button type="button" class="menu-item" on:click={selectLanguage}>
-        {language === 'en' ? 'Language' : 'Lingua'}
+    <div class="absolute bottom-12 left-0 bg-white border border-gray-200 rounded-lg shadow-lg flex flex-col p-1.5 min-w-32 z-30" role="presentation" on:click|stopPropagation on:keydown|stopPropagation>
+      <button type="button" class="bg-transparent border-none px-3 py-2 text-center cursor-pointer rounded text-gray-800 hover:bg-gray-100 transition-colors" on:click={openLanguageSettings}>
+        {$language === 'en' ? 'Language' : 'Lingua'}
       </button>
-
-      {#if showLangOptions}
-        <div class="lang-options">
-          <button type="button" class="menu-item" on:click={() => setLanguage('it')}>
-            Italiano
-          </button>
-          <button type="button" class="menu-item" on:click={() => setLanguage('en')}>
-            English
-          </button>
-        </div>
-      {/if}
-
-      <button type="button" class="menu-item" on:click={selectTemplate}>
+      <button type="button" class="bg-transparent border-none px-3 py-2 text-center cursor-pointer rounded text-gray-800 hover:bg-gray-100 transition-colors" on:click={selectTemplate}>
         template
       </button>
     </div>
   {/if}
+
+  {#if showLanguageModal}
+    <LanguageModal on:close={closeLanguageModal} />
+  {/if}
 </div>
 
-<svelte:window on:click={() => { showMenu = false; showLangOptions = false; }} />
-
-<style>
-  .settings-container {
-    position: relative;
-    display: flex;
-    align-items: center;
-  }
-
-  .settings-button {
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    font-size: 18px;
-    margin-right: 6px;
-    width: 36px;
-    height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #54656f;
-  }
-
-  .settings-menu {
-    position: absolute;
-    bottom: 50px;
-    left: 0;
-    background: white;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
-    display: flex;
-    flex-direction: column;
-    padding: 6px;
-    min-width: 120px;
-    z-index: 30;
-  }
-
-  .menu-item {
-    background: transparent;
-    border: none;
-    padding: 8px 12px;
-    text-align: center;
-    cursor: pointer;
-    border-radius: 6px;
-    color: #333;
-  }
-
-  .menu-item:hover {
-    background: #f3f4f6;
-  }
-
-  .lang-options {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding-left: 20px;
-  }
-</style>
+<svelte:window on:click={() => { showMenu = false; }} />

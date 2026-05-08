@@ -1,13 +1,11 @@
 export const getWsUrl = () => {
-    const url = `${import.meta.env.VITE_BACKEND}/770333918`;
-    return url.startsWith('ws') ? url : url.replace(/^http/, 'ws');
+    return `${import.meta.env.VITE_BACKEND}/770333918`;
 };
 
 export const getBackendUrl = () => {
-    const url = import.meta.env.VITE_BACKEND;
-    return url.startsWith('http') ? url : `https://${url}`;
+    const url = new URL(import.meta.env.VITE_BACKEND);
+    return `http://${url.host}/api/v1`;
 };
-
 /**
  * Converte una sorgente audio in URL riproducibile
  * @param {string|null} source - Base64 puro, data URL, blob:, o path relativo
