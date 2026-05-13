@@ -73,7 +73,7 @@
 
   <button
     type="button"
-    class="w-11 h-11 rounded-full border-none cursor-pointer flex items-center justify-center text-white transition-all duration-200 flex-shrink-0 {nuovoMessaggio.trim() ? 'bg-purple-600 hover:bg-purple-700' : 'bg-purple-900 hover:bg-purple-800'} {isRecording ? 'bg-red-700 animate-pulse' : ''} active:scale-95 disabled:bg-gray-300 disabled:cursor-not-allowed disabled:opacity-70"
+    class="w-11 h-11 rounded-full border-none cursor-pointer flex items-center justify-center text-white transition-all duration-200 flex-shrink-0 {nuovoMessaggio.trim() ? 'bg-purple-600 hover:bg-purple-700' : 'bg-sky-600 hover:bg-sky-700'} {isRecording ? 'bg-red-700 animate-pulse' : ''} active:scale-95 disabled:bg-gray-300 disabled:cursor-not-allowed disabled:opacity-70"
     disabled={isLoading}
     onclick={submitMessage}
     onmousedown={handleMicPress}
