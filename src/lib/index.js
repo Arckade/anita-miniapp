@@ -1,2 +1,2 @@
-export * from './stores.js';
+export * from './stores.svelte.js';
 export * from './utils.js';

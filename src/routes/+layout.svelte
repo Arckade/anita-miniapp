@@ -1,5 +1,5 @@
 <script>
-    import '../app.css'; // <--- AGGIUNGI QUESTA RIGA
+    import '../app.css';
     
     import favicon from '$lib/assets/favicon.svg';
 

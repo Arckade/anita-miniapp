@@ -1,9 +1,9 @@
 <script>
-  import { language } from '$lib/stores.js';
+  import { chatStore } from '$lib/stores.svelte';
   import LanguageModal from '$lib/components/LanguageModal.svelte';
 
-  let showMenu = false;
-  let showLanguageModal = false;
+  let showMenu = $state(false);
+  let showLanguageModal = $state(false);
 
   function toggleMenu() {
     showMenu = !showMenu;
@@ -24,30 +24,32 @@
   }
 </script>
 
-<div class="relative flex items-center" role="presentation" on:click|stopPropagation on:keydown|stopPropagation>
+<!-- Sostituito on:click|stopPropagation con onclick e e.stopPropagation() -->
+<div class="relative flex items-center" role="presentation" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
   <button
     type="button"
     class="bg-transparent border-none cursor-pointer text-lg mr-1.5 w-9 h-9 flex items-center justify-center text-gray-700 hover:opacity-80 transition-opacity"
     aria-label="Settings"
-    on:click={toggleMenu}
+    onclick={toggleMenu}
   >
     ⚙️
   </button>
 
   {#if showMenu}
-    <div class="absolute bottom-12 left-0 bg-white border border-gray-200 rounded-lg shadow-lg flex flex-col p-1.5 min-w-32 z-30" role="presentation" on:click|stopPropagation on:keydown|stopPropagation>
-      <button type="button" class="bg-transparent border-none px-3 py-2 text-center cursor-pointer rounded text-gray-800 hover:bg-gray-100 transition-colors" on:click={openLanguageSettings}>
-        {$language === 'en' ? 'Language' : 'Lingua'}
+    <div class="absolute bottom-12 left-0 bg-white border border-gray-200 rounded-lg shadow-lg flex flex-col p-1.5 min-w-32 z-30" role="presentation" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+      <button type="button" class="bg-transparent border-none px-3 py-2 text-center cursor-pointer rounded text-gray-800 hover:bg-gray-100 transition-colors" onclick={openLanguageSettings}>
+        {chatStore.language === 'en' ? 'Language' : 'Lingua'}
       </button>
-      <button type="button" class="bg-transparent border-none px-3 py-2 text-center cursor-pointer rounded text-gray-800 hover:bg-gray-100 transition-colors" on:click={selectTemplate}>
+      <button type="button" class="bg-transparent border-none px-3 py-2 text-center cursor-pointer rounded text-gray-800 hover:bg-gray-100 transition-colors" onclick={selectTemplate}>
         template
       </button>
     </div>
   {/if}
 
   {#if showLanguageModal}
-    <LanguageModal on:close={closeLanguageModal} />
+    <!-- Sostituito on:close con onclose (Svelte 5 props) -->
+    <LanguageModal onclose={closeLanguageModal} />
   {/if}
 </div>
 
-<svelte:window on:click={() => { showMenu = false; }} />
+<svelte:window onclick={() => { showMenu = false; }} />

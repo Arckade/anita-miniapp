@@ -1,17 +1,10 @@
 <script>
-  import { tick, onMount, onDestroy } from 'svelte';
-  import {
-    incomingMessages,
-    isBackendTyping,
-    connectionStatus,
-    sendText,
-    sendAudio,
-    consumeIncomingMessage,
-    language
-  } from '$lib/stores.js';
+  import { tick, onMount } from 'svelte';
+  import { chatStore } from '$lib/stores.svelte.js';
   import ChatMessage from '$lib/components/ChatMessage.svelte';
   import ChatInput from '$lib/components/ChatInput.svelte';
   import SettingsMenu from '$lib/components/SettingsMenu.svelte';
+
   let messaggi = $state([
     {
       testo: "Ciao! sono anita, di cosa vuoi parlare?",
@@ -23,10 +16,10 @@
   let isSendingAudio = $state(false);
   let chatContainer;
 
-  // Sottoscrivi agli store del WebSocket
-  let backendTyping = $derived($isBackendTyping);
-  let status = $derived($connectionStatus);
-  let pendingMessages = $derived($incomingMessages);
+  // Sottoscrivi agli store del WebSocket tramite l'istanza chatStore
+  let backendTyping = $derived(chatStore.isBackendTyping);
+  let status = $derived(chatStore.connectionStatus);
+  let pendingMessages = $derived(chatStore.incomingMessages);
 
   // Computa isLoading: vero solo durante invio audio
   let isLoading = $derived(isSendingAudio);
@@ -47,8 +40,9 @@
       audio_format: incoming.audio_format || 'webm',
     };
 
-    messaggi = [...messaggi, newMsg];
-    consumeIncomingMessage();
+    // In Svelte 5 possiamo usare .push() direttamente!
+    messaggi.push(newMsg);
+    chatStore.consumeIncomingMessage();
 
     // Scroll dopo il render
     tick().then(scrollToBottom);
@@ -58,9 +52,10 @@
   function handleSendMessage(text) {
     if (!text) return;
 
-    const sent = sendText(text, $language);
+    // Rimosso il parametro language, non serve più a sendText
+    const sent = chatStore.sendText(text);
     if (sent) {
-      messaggi = [...messaggi, { testo: text, mittente: 'Io' }];
+      messaggi.push({ testo: text, mittente: 'Io' });
       tick().then(scrollToBottom);
     } else {
       showError();
@@ -95,10 +90,10 @@
 
     } catch (err) {
       console.error('Impossibile avviare registrazione:', err);
-      const errorMsg = $language === 'en'
+      const errorMsg = chatStore.language === 'en'
         ? 'Microphone access denied.'
         : 'Accesso al microfono negato.';
-      messaggi = [...messaggi, { testo: errorMsg, mittente: 'AI' }];
+      messaggi.push({ testo: errorMsg, mittente: 'AI' });
     }
   }
 
@@ -127,7 +122,7 @@
     const localAudioUrl = URL.createObjectURL(blob);
 
     // Mostra immediatamente il messaggio vocale dell'utente
-    messaggi = [...messaggi, { testo: '', audio: localAudioUrl, mittente: 'Io' }];
+    messaggi.push({ testo: '', audio: localAudioUrl, mittente: 'Io' });
     await tick();
     scrollToBottom();
 
@@ -143,7 +138,8 @@
       reader.readAsDataURL(blob);
 
       const base64 = await base64Promise;
-      const sent = sendAudio(base64, $language);
+      // Rimosso il parametro language, non serve più a sendAudio
+      const sent = chatStore.sendAudio(base64);
 
       if (!sent) {
         showError();
@@ -176,13 +172,11 @@
   }
 
   function showError() {
-    const errorMsg = $language === 'en'
+    const errorMsg = chatStore.language === 'en'
       ? 'Connection error. Try again.'
       : 'Errore di connessione. Riprova.';
-    messaggi = [...messaggi, { testo: errorMsg, mittente: 'AI' }];
+    messaggi.push({ testo: errorMsg, mittente: 'AI' });
   }
-
-
 
   // Cleanup on destroy
   onMount(() => {
@@ -195,36 +189,35 @@
   {#if status !== 'connected'}
     <div class="connection-bar {status === 'connecting' ? 'connecting' : 'error'}">
       {status === 'connecting'
-        ? ($language === 'en' ? 'Connecting...' : 'Connessione in corso...')
-        : ($language === 'en' ? 'Disconnected - Reconnecting...' : 'Disconnesso - Riconnessione...')}
+        ? (chatStore.language === 'en' ? 'Connecting...' : 'Connessione in corso...')
+        : (chatStore.language === 'en' ? 'Disconnected - Reconnecting...' : 'Disconnesso - Riconnessione...')}
     </div>
   {/if}
 
   <div class="chat-container" bind:this={chatContainer}>
-    {#each messaggi as msg (msg)} <!-- Key unica per ottimizzazione -->
-      <ChatMessage {msg} language={$language} />
+    {#each messaggi as msg, i (i)} <!-- Usiamo l'indice come key -->
+      <ChatMessage {msg} language={chatStore.language} />
     {/each}
   </div>
 
   {#if backendTyping}
     <div class="typing">
-      {$language === 'en' ? 'Anita is typing...' : 'Anita sta scrivendo...'}
+      {chatStore.language === 'en' ? 'Anita is typing...' : 'Anita sta scrivendo...'}
     </div>
   {/if}
 
   <ChatInput
-    language={$language}
+    language={chatStore.language}
     {isLoading}
     {isRecording}
     onSendMessage={handleSendMessage}
     onStartRecording={startRecording}
     onStopRecording={stopRecording}
   >
-    <div slot="settings">
-      <SettingsMenu
-        on:selectTemplate={() => console.log('Template clicked')}
-      />
-    </div>
+    <!-- In Svelte 5 gli slot con nome diventano Snippets -->
+    {#snippet settings()}
+      <SettingsMenu />
+    {/snippet}
   </ChatInput>
 </main>
 
