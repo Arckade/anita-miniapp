@@ -59,7 +59,9 @@
 </script>
 
 <form class="px-3.5 py-2.5 mx-3 my-2 mb-3 bg-gray-700/55 backdrop-blur-md flex gap-2.5 rounded-full border border-white/15 items-center shadow-2xl" onsubmit={handleFormSubmit}>
-  {@render settings?.()}
+  {#if settings}
+    {@render settings()}
+  {/if}
 
   <input
     type="text"
