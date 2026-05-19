@@ -184,42 +184,52 @@
   });
 </script>
 
-<main>
-  <!-- Indicatore connessione -->
-  {#if status !== 'connected'}
-    <div class="connection-bar {status === 'connecting' ? 'connecting' : 'error'}">
-      {status === 'connecting'
-        ? (chatStore.language === 'en' ? 'Connecting...' : 'Connessione in corso...')
-        : (chatStore.language === 'en' ? 'Disconnected - Reconnecting...' : 'Disconnesso - Riconnessione...')}
+{#if chatStore.authStatus === 'unauthorized'}
+  <div class="unauthorized-overlay">
+    <div class="unauthorized-box">
+      <h2>{chatStore.language === 'en' ? 'Access Denied' : 'Accesso Negato'}</h2>
+      <p>{chatStore.language === 'en' ? 'Open this app from Telegram or use debug mode.' : 'Apri questa app da Telegram o usa la modalità debug.'}</p>
+      <code>?debug=1&user_id=123</code>
     </div>
-  {/if}
-
-  <div class="chat-container" bind:this={chatContainer}>
-    {#each messaggi as msg, i (i)} <!-- Usiamo l'indice come key -->
-      <ChatMessage {msg} language={chatStore.language} />
-    {/each}
   </div>
+{:else}
+  <main>
+    <!-- Indicatore connessione -->
+    {#if status !== 'connected'}
+      <div class="connection-bar {status === 'connecting' ? 'connecting' : 'error'}">
+        {status === 'connecting'
+          ? (chatStore.language === 'en' ? 'Connecting...' : 'Connessione in corso...')
+          : (chatStore.language === 'en' ? 'Disconnected - Reconnecting...' : 'Disconnesso - Riconnessione...')}
+      </div>
+    {/if}
 
-  {#if backendTyping}
-    <div class="typing">
-      {chatStore.language === 'en' ? 'Anita is typing...' : 'Anita sta scrivendo...'}
+    <div class="chat-container" bind:this={chatContainer}>
+      {#each messaggi as msg, i (i)} <!-- Usiamo l'indice come key -->
+        <ChatMessage {msg} language={chatStore.language} />
+      {/each}
     </div>
-  {/if}
 
-  <ChatInput
-    language={chatStore.language}
-    {isLoading}
-    {isRecording}
-    onSendMessage={handleSendMessage}
-    onStartRecording={startRecording}
-    onStopRecording={stopRecording}
-  >
-    <!-- In Svelte 5 gli slot con nome diventano Snippets -->
-    {#snippet settings()}
-      <SettingsMenu />
-    {/snippet}
-  </ChatInput>
-</main>
+    {#if backendTyping}
+      <div class="typing">
+        {chatStore.language === 'en' ? 'Anita is typing...' : 'Anita sta scrivendo...'}
+      </div>
+    {/if}
+
+    <ChatInput
+      language={chatStore.language}
+      {isLoading}
+      {isRecording}
+      onSendMessage={handleSendMessage}
+      onStartRecording={startRecording}
+      onStopRecording={stopRecording}
+    >
+      <!-- In Svelte 5 gli slot con nome diventano Snippets -->
+      {#snippet settings()}
+        <SettingsMenu />
+      {/snippet}
+    </ChatInput>
+  </main>
+{/if}
 
 <style>
   :global(body) {
@@ -303,5 +313,47 @@
   @keyframes typingDot {
     0%, 100% { opacity: 0.3; }
     50% { opacity: 1; }
+  }
+
+  .unauthorized-overlay {
+    position: fixed;
+    inset: 0;
+    background-color: #d1d7db;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 1000;
+  }
+
+  .unauthorized-box {
+    background: white;
+    padding: 32px;
+    border-radius: 16px;
+    text-align: center;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+    max-width: 400px;
+    width: 100%;
+  }
+
+  .unauthorized-box h2 {
+    margin: 0 0 12px;
+    color: #111;
+    font-size: 20px;
+  }
+
+  .unauthorized-box p {
+    margin: 0 0 16px;
+    color: #555;
+    font-size: 14px;
+  }
+
+  .unauthorized-box code {
+    display: inline-block;
+    background: #f3f4f6;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    color: #111;
   }
 </style>
