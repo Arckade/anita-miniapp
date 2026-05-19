@@ -253,4 +253,9 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
+# aider
+.aider*
+!.aider.conf.yml
+!.aider.model.settings.yml
+
 ngrok.exe

@@ -183,5 +183,147 @@
 </div>
 
 <style>
-  /* I CSS rimangono quelli che hai già */
+   .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    padding: 20px;
+  }
+
+  .language-modal {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    width: min(90vw, 600px);
+    max-width: 600px;
+    min-width: 320px;
+    max-height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid #eee;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    flex-shrink: 0;
+  }
+
+  .modal-header h2 {
+    margin: 0;
+    font-size: 20px;
+  }
+
+  .close-button {
+    background: transparent;
+    border: none;
+    color: white;
+    font-size: 24px;
+    cursor: pointer;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: background 0.2s;
+  }
+
+  .close-button:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  .language-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    flex: 1;
+    gap: 0;
+    overflow-y: auto;
+  }
+
+  .language-section {
+    padding: 20px;
+  }
+
+  .language-section h3 {
+    margin-top: 0;
+    margin-bottom: 12px;
+    font-size: 16px;
+  }
+
+  .language-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .lang-button {
+    width: 100%;
+    text-align: left;
+    padding: 10px 14px;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    background: white;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    color: #222;
+  }
+
+  .lang-button:hover,
+  .lang-button:focus {
+    border-color: #667eea;
+    outline: none;
+  }
+
+  .lang-button.active {
+    border-color: #667eea;
+    background: #eef2ff;
+  }
+
+  .error-message {
+    color: #a00;
+    padding: 0 20px 10px;
+  }
+
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 16px 20px 20px;
+    background: #fafafa;
+    flex-shrink: 0;
+  }
+
+  .cancel-button,
+  .save-button {
+    padding: 12px 18px;
+    border-radius: 9999px;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  .cancel-button {
+    background: #f4f4f5;
+    color: #111;
+  }
+
+  .save-button {
+    background: #4f46e5;
+    color: white;
+  }
+
+  .cancel-button:disabled,
+  .save-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 </style>
