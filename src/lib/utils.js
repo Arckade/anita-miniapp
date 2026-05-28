@@ -36,3 +36,41 @@ export const getAudioUrl = (source, format = 'webm') => {
     const backend = getBackendUrl();
     return `${backend.replace(/\/$/, '')}/recordings/${source}`;
 };
+
+export const countryCodeToEmoji = (countryCode) => {
+    if (!countryCode || typeof countryCode !== 'string') return '';
+    const code = countryCode.toUpperCase();
+    if (code.length !== 2) return '';
+    const first = 0x1F1E6 + code.charCodeAt(0) - 65;
+    const second = 0x1F1E6 + code.charCodeAt(1) - 65;
+    return String.fromCodePoint(first, second);
+};
+
+export const countryForLanguage = (language) => {
+    if (!language || typeof language !== 'string') return '';
+    const code = language.trim();
+    if (!code) return '';
+
+    const root = code.split(/[-_]/)[0].toLowerCase();
+    const map = {
+        en: 'US',
+        it: 'IT',
+        es: 'ES',
+        fr: 'FR',
+        de: 'DE',
+        pt: 'PT',
+        ja: 'JP',
+        zh: 'CN',
+        ru: 'RU'
+    };
+
+    if (map[root]) {
+        return map[root];
+    }
+
+    if (/^[A-Za-z]{2}$/.test(root)) {
+        return root.toUpperCase();
+    }
+
+    return '';
+};

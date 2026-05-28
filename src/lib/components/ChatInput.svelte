@@ -1,5 +1,27 @@
 <script>
   import LanguageModal from './LanguageModal.svelte';
+  import { chatStore } from '$lib/stores.svelte';
+  import { countryCodeToEmoji, countryForLanguage } from '$lib/utils.js';
+
+  const languageFlagMap = {
+    en: '🇺🇸',
+    it: '🇮🇹',
+    es: '🇪🇸',
+    fr: '🇫🇷',
+    de: '🇩🇪',
+    pt: '🇵🇹',
+    ja: '🇯🇵',
+    zh: '🇨🇳',
+    ru: '🇷🇺'
+  };
+
+  function getTargetFlag() {
+    const lang = String(chatStore.targetLanguage || '').split(/[-_]/)[0].toLowerCase();
+    if (languageFlagMap[lang]) return languageFlagMap[lang];
+    const country = countryForLanguage(chatStore.targetLanguage || '');
+    const emoji = countryCodeToEmoji(country);
+    return emoji || '🏳️';
+  }
 
   let {
     language,
@@ -87,8 +109,14 @@
 <form class="px-3.5 py-2.5 mx-3 my-2 mb-3 bg-gray-700/55 backdrop-blur-md flex gap-2.5 rounded-full border border-white/15 items-center shadow-2xl" class:typing={isTyping} onsubmit={handleFormSubmit}>
   <!-- Left buttons: Lingua, Metodo di insegnamento -->
   <div class="left-buttons" aria-hidden={isTyping}>
-    <button type="button" class="icon-btn language-btn" onclick={openLanguageModal} aria-label="Lingua">
-      <span class="flag">🇮🇹</span>
+    <button
+      type="button"
+      class="icon-btn language-btn"
+      onclick={openLanguageModal}
+      aria-label={language === 'en' ? 'Language to learn' : 'Lingua da imparare'}
+      title={language === 'en' ? 'Language to learn' : 'Lingua da imparare'}
+    >
+      <span class="flag" aria-hidden="true">{getTargetFlag()}</span>
     </button>
 
     <button type="button" class="icon-btn teach-btn" onclick={toggleTeachingMethod} aria-pressed={teachingMethodActive} aria-label="Metodo di insegnamento">
@@ -180,16 +208,26 @@
   }
 
   .language-btn .flag {
-    font-size: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.6em;
+    height: 1.6em;
+    font-size: 20px;
+    line-height: 1;
+    font-family: 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', 'Segoe UI Symbol', 'Android Emoji', sans-serif;
+    text-rendering: optimizeLegibility;
   }
 
   form {
-    width: 100%;
+    width: calc(100% - 1.5rem);
+    max-width: calc(100% - 1.5rem);
     min-height: 56px;
     position: relative;
     z-index: 10;
     background: rgba(31, 41, 55, 0.95);
     border: 1px solid rgba(255, 255, 255, 0.18);
+    box-sizing: border-box;
   }
 
   /* Quando si scrive, nascondiamo i pulsanti laterali e l'input occupa tutta la barra */

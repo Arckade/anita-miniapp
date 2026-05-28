@@ -243,6 +243,16 @@
     justify-content: center;
   }
 
+  :global(.flag) {
+    display: inline-block;
+    width: 1.4em;
+    height: 1.4em;
+    font-size: 18px;
+    line-height: 1;
+    font-family: 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', 'Segoe UI Symbol', 'Android Emoji', sans-serif;
+    text-rendering: optimizeLegibility;
+  }
+
   main {
     width: 100%;
     max-width: 500px;
