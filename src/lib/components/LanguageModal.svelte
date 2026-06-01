@@ -4,8 +4,8 @@
 
   let { onclose } = $props();
 
-  let selectedNativeLanguage = $state('it');
-  let selectedTargetLanguage = $state('en');
+  let selectedNativeLanguage = $state(chatStore.nativeLanguage || 'it');
+  let selectedTargetLanguage = $state(chatStore.targetLanguage || 'en');
   let isLoading = $state(true);
   let isSaving = $state(false);
   let errorMessage = $state('');
@@ -24,43 +24,14 @@
     };
   }
 
-  async function selectNative(lang) {
-    const previousNative = selectedNativeLanguage;
+  function selectNative(lang) {
     selectedNativeLanguage = lang;
     errorMessage = '';
-    isSaving = true;
-
-    try {
-      await chatStore.saveLanguageSettings(selectedNativeLanguage, selectedTargetLanguage);
-    } catch (error) {
-      selectedNativeLanguage = previousNative;
-      console.error('Errore salvataggio lingua madre:', error);
-      // Accediamo a chatStore.language invece di $language
-      errorMessage = chatStore.language === 'en'
-        ? `Unable to save native language. ${error.message}`
-        : `Impossibile salvare la lingua madre. ${error.message}`;
-    } finally {
-      isSaving = false;
-    }
   }
 
-  async function selectTarget(lang) {
-    const previousTarget = selectedTargetLanguage;
+  function selectTarget(lang) {
     selectedTargetLanguage = lang;
     errorMessage = '';
-    isSaving = true;
-
-    try {
-      await chatStore.saveLanguageSettings(selectedNativeLanguage, selectedTargetLanguage);
-    } catch (error) {
-      selectedTargetLanguage = previousTarget;
-      console.error('Errore salvataggio lingua da imparare:', error);
-      errorMessage = chatStore.language === 'en'
-        ? `Unable to save target language. ${error.message}`
-        : `Impossibile salvare la lingua da imparare. ${error.message}`;
-    } finally {
-      isSaving = false;
-    }
   }
 
   async function fetchLanguages() {
@@ -73,6 +44,8 @@
       selectedTargetLanguage = data.target_language || selectedTargetLanguage;
     } catch (error) {
       console.error('Errore caricamento lingue:', error);
+      selectedNativeLanguage = chatStore.nativeLanguage || selectedNativeLanguage;
+      selectedTargetLanguage = chatStore.targetLanguage || selectedTargetLanguage;
       errorMessage = chatStore.language === 'en'
         ? 'Unable to load current languages.'
         : 'Impossibile caricare le lingue correnti.';

@@ -1,5 +1,6 @@
 <script>
     import '../app.css';
+    import 'flag-icons/css/flag-icons.min.css';
     
     import favicon from '$lib/assets/favicon.svg';
 

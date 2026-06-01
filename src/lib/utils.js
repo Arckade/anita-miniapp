@@ -38,9 +38,7 @@ export const getAudioUrl = (source, format = 'webm') => {
 };
 
 export const countryCodeToEmoji = (countryCode) => {
-    if (!countryCode || typeof countryCode !== 'string') return '';
     const code = countryCode.toUpperCase();
-    if (code.length !== 2) return '';
     const first = 0x1F1E6 + code.charCodeAt(0) - 65;
     const second = 0x1F1E6 + code.charCodeAt(1) - 65;
     return String.fromCodePoint(first, second);
