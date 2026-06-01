@@ -14,6 +14,7 @@
 
   let isRecording = $state(false);
   let isSendingAudio = $state(false);
+  let recordingType = $state('native');
   let chatContainer;
 
   // Sottoscrivi agli store del WebSocket tramite l'istanza chatStore
@@ -67,8 +68,9 @@
   let mediaStream = null;
   let audioChunks = [];
 
-  async function startRecording() {
+  async function startRecording(type = 'native') {
     if (isRecording || isSendingAudio) return;
+    recordingType = type;
 
     try {
       mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -138,8 +140,9 @@
       reader.readAsDataURL(blob);
 
       const base64 = await base64Promise;
-      // Rimosso il parametro language, non serve più a sendAudio
-      const sent = chatStore.sendAudio(base64);
+      const audioLanguage = recordingType === 'target' ? chatStore.targetLanguage : chatStore.nativeLanguage;
+      console.log('Invio audio con lingua:', audioLanguage, 'recordingType:', recordingType);
+      const sent = chatStore.sendAudio(base64, audioLanguage);
 
       if (!sent) {
         showError();
@@ -155,6 +158,7 @@
   }
 
   function cleanupRecording() {
+    recordingType = 'native';
     if (mediaStream) {
       mediaStream.getTracks().forEach(t => t.stop());
       mediaStream = null;

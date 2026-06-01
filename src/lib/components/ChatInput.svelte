@@ -61,7 +61,8 @@
   function handleMicPress(e) {
     if (nuovoMessaggio.trim() || isLoading) return;
     if (e.cancelable) e.preventDefault();
-    onStartRecording?.();
+    const recordingType = e.currentTarget?.dataset?.recordingType || 'native';
+    onStartRecording?.(recordingType);
   }
 
   function handleMicRelease() {
@@ -139,6 +140,7 @@
         <button
           type="button"
           class="audio-btn native-btn {isRecording ? 'recording' : ''}"
+          data-recording-type="native"
           disabled={isLoading}
           onclick={submitMessage}
           onmousedown={handleMicPress}
@@ -173,6 +175,7 @@
         <button
           type="button"
           class="audio-btn target-btn"
+          data-recording-type="target"
           disabled={isLoading}
           onmousedown={handleMicPress}
           ontouchstart={handleMicPress}

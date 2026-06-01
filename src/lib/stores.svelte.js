@@ -243,10 +243,16 @@ class ChatStore {
     return true;
   }
 
-  sendAudio(base64Audio) {
+  sendAudio(base64Audio, audioLanguage = this.nativeLanguage) {
     if (!this.isSocketReady()) return false;
     const cleanBase64 = base64Audio.includes(',') ? base64Audio.split(',')[1] : base64Audio;
-    this.socket.send(JSON.stringify({ type: 'audio', audio_bytes: cleanBase64 }));
+    const payload = {
+      type: 'audio',
+      audio_bytes: cleanBase64,
+      language: audioLanguage || this.nativeLanguage,
+    };
+    console.log('sendAudio payload:', { type: payload.type, language: payload.language, bytes: cleanBase64.length });
+    this.socket.send(JSON.stringify(payload));
     return true;
   }
 
