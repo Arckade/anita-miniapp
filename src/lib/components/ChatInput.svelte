@@ -10,6 +10,10 @@
     return lang || '';
   }
 
+  function getLanguageInitials(code) {
+    return String(code || '').split(/[-_]/)[0].toUpperCase() || '';
+  }
+
   function getNativeCountry() {
     return getLanguageCountry(chatStore.nativeLanguage) || 'it';
   }
@@ -31,7 +35,7 @@
 
   // UI state
   let showLanguageModal = $state(false);
-  let teachingMethodActive = $state(false);
+  let teachingMethodActive = $derived(chatStore.teachingModeActive);
   let isTyping = $state(false);
 
   function openLanguageModal() {
@@ -43,7 +47,7 @@
   }
 
   function toggleTeachingMethod() {
-    teachingMethodActive = !teachingMethodActive;
+    chatStore.teachingModeActive = !chatStore.teachingModeActive;
   }
 
   function submitMessage() {
@@ -60,8 +64,9 @@
 
   function handleMicPress(e) {
     if (nuovoMessaggio.trim() || isLoading) return;
-    if (e.cancelable) e.preventDefault();
     const recordingType = e.currentTarget?.dataset?.recordingType || 'native';
+    if (recordingType === 'native' && teachingMethodActive) return;
+    if (e.cancelable) e.preventDefault();
     onStartRecording?.(recordingType);
   }
 
@@ -139,7 +144,9 @@
       <div class="audio-group" role="group" aria-label={language === 'en' ? 'Audio controls' : 'Controlli audio'}>
         <button
           type="button"
-          class="audio-btn native-btn {isRecording ? 'recording' : ''}"
+          class="audio-btn native-btn"
+          class:recording={isRecording}
+          class:inactive={teachingMethodActive}
           data-recording-type="native"
           disabled={isLoading}
           onclick={submitMessage}
@@ -160,7 +167,7 @@
               <rect x="6" y="6" width="12" height="12" rx="2"/>
             </svg>
           {:else}
-            <span class={"fi fi-" + getNativeCountry() + " native-flag"} aria-hidden="true"></span>
+            <span class="lang-initial native-initial" aria-hidden="true">{getLanguageInitials(chatStore.nativeLanguage)}</span>
           {/if}
         
         </button>
@@ -185,7 +192,7 @@
           aria-label={language === 'en' ? 'Hold to record target language audio' : 'Tieni premuto per registrare nella lingua da imparare'}
           title={language === 'en' ? 'Record target language' : 'Registra lingua da imparare'}
         >
-          <span class={"fi fi-" + getTargetCountry() + " target-flag"} aria-hidden="true"></span>
+          <span class="lang-initial target-initial" aria-hidden="true">{getLanguageInitials(chatStore.targetLanguage)}</span>
         
         </button>
       </div>
@@ -254,6 +261,12 @@
     transform: scale(1.03);
   }
 
+  .audio-btn.inactive {
+    background-color: #6b7280;
+    opacity: 0.8;
+    cursor: not-allowed;
+  }
+
   .native-btn {
     background-color: #0ea5e9;
   }
@@ -281,21 +294,13 @@
     50% { box-shadow: 0 0 0 8px rgba(220, 38, 38, 0); }
   }
 
-  .audio-btn .flag {
-    font-size: 20px;
+  .audio-btn .lang-initial {
+    font-size: 0.95rem;
     line-height: 1;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
     z-index: 1;
-  }
-
-  .audio-btn .mic-overlay {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    pointer-events: none;
-    opacity: 0.9;
-    color: rgba(255, 255, 255, 0.95);
   }
 
   /* Group wrapper with single outline and center mic */

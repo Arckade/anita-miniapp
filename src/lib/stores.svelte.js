@@ -11,6 +11,7 @@ class ChatStore {
   showAiText = $state(true);
   nativeLanguage = $state('it');
   targetLanguage = $state('en');
+  teachingModeActive = $state(false);
 
   // --- AUTH STATE ---
   credentials = $state(null);
@@ -27,6 +28,7 @@ class ChatStore {
       this.showAiText = localStorage.getItem('anita_show_ai_text') === null ? true : localStorage.getItem('anita_show_ai_text') === 'true';
       this.nativeLanguage = localStorage.getItem('anita_native_language') || 'it';
       this.targetLanguage = localStorage.getItem('anita_target_language') || 'en';
+      this.teachingModeActive = localStorage.getItem('anita_teaching_mode_active') === 'true';
     }
 
     $effect.root(() => {
@@ -35,6 +37,7 @@ class ChatStore {
         localStorage.setItem('anita_show_ai_text', String(this.showAiText));
         localStorage.setItem('anita_native_language', this.nativeLanguage);
         localStorage.setItem('anita_target_language', this.targetLanguage);
+        localStorage.setItem('anita_teaching_mode_active', String(this.teachingModeActive));
       }
     });
 
