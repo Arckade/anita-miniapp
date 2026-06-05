@@ -160,6 +160,22 @@ class ChatStore {
     return data;
   }
 
+  async setMode(mode) {
+    const backend = getBackendUrl();
+    const response = await this.fetchWithAuth(`${backend}/settings/mode`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode })
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`Failed to update mode: ${response.status} ${body}`);
+    }
+
+    return await response.json();
+  }
+
   connect() {
     if (this.socket && (this.socket.readyState === WebSocket.CONNECTING || this.socket.readyState === WebSocket.OPEN)) {
       return;

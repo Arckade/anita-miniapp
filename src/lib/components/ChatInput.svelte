@@ -26,6 +26,7 @@
     language,
     isLoading,
     isRecording,
+    recordingType,
     onSendMessage,
     onStartRecording,
     onStopRecording
@@ -46,8 +47,16 @@
     showLanguageModal = false;
   }
 
-  function toggleTeachingMethod() {
-    chatStore.teachingModeActive = !chatStore.teachingModeActive;
+  async function toggleTeachingMethod() {
+    const nextMode = chatStore.teachingModeActive ? 'study' : 'conversation';
+    const previousState = chatStore.teachingModeActive;
+
+    try {
+      await chatStore.setMode(nextMode);
+      chatStore.teachingModeActive = !previousState;
+    } catch (err) {
+      console.error('Unable to update backend mode:', err);
+    }
   }
 
   function submitMessage() {
@@ -57,23 +66,38 @@
     isTyping = false;
   }
 
+  let isAudioPressRecording = false;
+
   function handleFormSubmit(e) {
     e.preventDefault();
     submitMessage();
   }
 
-  function handleMicPress(e) {
-    if (nuovoMessaggio.trim() || isLoading) return;
-    const recordingType = e.currentTarget?.dataset?.recordingType || 'native';
-    if (recordingType === 'native' && teachingMethodActive) return;
+  function handleAudioPointerDown(e) {
+    if (isLoading) return;
+    const buttonType = e.currentTarget?.dataset?.recordingType || 'native';
+
+    if (buttonType === 'native' && teachingMethodActive) return;
+    if (buttonType === 'native' && nuovoMessaggio.trim()) return;
+    if (isRecording) return;
+
     if (e.cancelable) e.preventDefault();
-    onStartRecording?.(recordingType);
+    isAudioPressRecording = true;
+    onStartRecording?.(buttonType);
   }
 
-  function handleMicRelease() {
+  function handleAudioPointerUp() {
+    if (!isAudioPressRecording) return;
+    isAudioPressRecording = false;
     if (isRecording) {
       onStopRecording?.();
     }
+  }
+
+  function handleNativeAudioClick(e) {
+    if (isLoading || isRecording || isAudioPressRecording) return;
+    if (!nuovoMessaggio.trim()) return;
+    submitMessage();
   }
 
   function handleKeyDown(e) {
@@ -145,17 +169,22 @@
         <button
           type="button"
           class="audio-btn native-btn"
-          class:recording={isRecording}
+          class:recording={isRecording && recordingType === 'native'}
           class:inactive={teachingMethodActive}
           data-recording-type="native"
-          disabled={isLoading}
-          onclick={submitMessage}
-          onmousedown={handleMicPress}
-          ontouchstart={handleMicPress}
-          onmouseup={handleMicRelease}
-          ontouchend={handleMicRelease}
-          onmouseleave={handleMicRelease}
-          aria-label={isRecording ? (language === 'en' ? 'Release to stop recording' : 'Rilascia per fermare la registrazione') : (nuovoMessaggio.trim() ? (language === 'en' ? 'Send message' : 'Invia messaggio') : (language === 'en' ? 'Hold to record native audio' : 'Tieni premuto per registrare in lingua madre'))}
+          disabled={isLoading || (isRecording && recordingType === 'target')}
+          onclick={handleNativeAudioClick}
+          onmousedown={handleAudioPointerDown}
+          ontouchstart={handleAudioPointerDown}
+          onmouseup={handleAudioPointerUp}
+          ontouchend={handleAudioPointerUp}
+          onmouseleave={handleAudioPointerUp}
+          ontouchcancel={handleAudioPointerUp}
+          aria-label={isRecording && recordingType === 'native'
+            ? (language === 'en' ? 'Hold to record native audio' : 'Tieni premuto per registrare in lingua madre')
+            : (nuovoMessaggio.trim()
+              ? (language === 'en' ? 'Send message' : 'Invia messaggio')
+              : (language === 'en' ? 'Hold to record native audio' : 'Tieni premuto per registrare in lingua madre'))}
         >
           {#if nuovoMessaggio.trim()}
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -183,13 +212,16 @@
           type="button"
           class="audio-btn target-btn"
           data-recording-type="target"
-          disabled={isLoading}
-          onmousedown={handleMicPress}
-          ontouchstart={handleMicPress}
-          onmouseup={handleMicRelease}
-          ontouchend={handleMicRelease}
-          onmouseleave={handleMicRelease}
-          aria-label={language === 'en' ? 'Hold to record target language audio' : 'Tieni premuto per registrare nella lingua da imparare'}
+          disabled={isLoading || (isRecording && recordingType === 'native')}
+          onmousedown={handleAudioPointerDown}
+          ontouchstart={handleAudioPointerDown}
+          onmouseup={handleAudioPointerUp}
+          ontouchend={handleAudioPointerUp}
+          onmouseleave={handleAudioPointerUp}
+          ontouchcancel={handleAudioPointerUp}
+          aria-label={isRecording && recordingType === 'target'
+            ? (language === 'en' ? 'Release to stop recording' : 'Rilascia per fermare la registrazione')
+            : (language === 'en' ? 'Hold to record target language audio' : 'Tieni premuto per registrare nella lingua da imparare')}
           title={language === 'en' ? 'Record target language' : 'Registra lingua da imparare'}
         >
           <span class="lang-initial target-initial" aria-hidden="true">{getLanguageInitials(chatStore.targetLanguage)}</span>

@@ -15,7 +15,7 @@
   let isRecording = $state(false);
   let isSendingAudio = $state(false);
   let recordingType = $state('native');
-  let chatContainer;
+  let chatContainer = $state(null);
 
   // Sottoscrivi agli store del WebSocket tramite l'istanza chatStore
   let backendTyping = $derived(chatStore.isBackendTyping);
@@ -223,6 +223,7 @@
       language={chatStore.language}
       {isLoading}
       {isRecording}
+      {recordingType}
       onSendMessage={handleSendMessage}
       onStartRecording={startRecording}
       onStopRecording={stopRecording}
