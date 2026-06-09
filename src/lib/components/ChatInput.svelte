@@ -48,14 +48,16 @@
   }
 
   async function toggleTeachingMethod() {
-    const nextMode = chatStore.teachingModeActive ? 'study' : 'conversation';
-    const previousState = chatStore.teachingModeActive;
+    const nextState = !chatStore.teachingModeActive;
+    const nextMode = nextState ? 'study' : 'conversation';
+
+    chatStore.teachingModeActive = nextState;
 
     try {
       await chatStore.setMode(nextMode);
-      chatStore.teachingModeActive = !previousState;
     } catch (err) {
       console.error('Unable to update backend mode:', err);
+      // Keep the local UI state even if backend update fails.
     }
   }
 
@@ -77,7 +79,7 @@
     if (isLoading) return;
     const buttonType = e.currentTarget?.dataset?.recordingType || 'native';
 
-    if (buttonType === 'native' && teachingMethodActive) return;
+    if (buttonType === 'native' && chatStore.teachingModeActive) return;
     if (buttonType === 'native' && nuovoMessaggio.trim()) return;
     if (isRecording) return;
 
@@ -141,11 +143,15 @@
       aria-label={language === 'en' ? 'Language to learn' : 'Lingua da imparare'}
       title={language === 'en' ? 'Language to learn' : 'Lingua da imparare'}
     >
-      <span class="flag" aria-hidden="true">🌎</span>
+      <img src="/languages.png" alt="" aria-hidden="true" />
     </button>
 
     <button type="button" class="icon-btn teach-btn" onclick={toggleTeachingMethod} aria-pressed={teachingMethodActive} aria-label="Metodo di insegnamento">
-      <span class="flag" aria-hidden="true">🎓</span>
+      <img
+        src={teachingMethodActive ? '/study.png' : '/conversation.png'}
+        alt=""
+        aria-hidden="true"
+      />
     </button>
   </div>
 
@@ -261,17 +267,18 @@
     border-color: rgba(255, 255, 255, 0.8);
   }
 
-  .language-btn .flag {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.6em;
-    height: 1.6em;
-    font-size: 20px;
-    line-height: 1;
-    font-family: 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', 'Segoe UI Symbol', 'Android Emoji', sans-serif;
-    text-rendering: optimizeLegibility;
-    filter: grayscale(1) contrast(1.8);
+  .language-btn img {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+    display: block;
+  }
+
+  .teach-btn img {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+    display: block;
   }
 
   .audio-btn {
@@ -366,14 +373,6 @@
 
   .audio-center .center-mic {
     opacity: 0.95;
-  }
-
-  .teach-btn[aria-pressed="false"] .flag {
-    filter: grayscale(1) contrast(1.8);
-  }
-
-  .teach-btn[aria-pressed="true"] .flag {
-    filter: none;
   }
 
   form {
