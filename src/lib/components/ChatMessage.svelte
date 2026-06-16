@@ -1,53 +1,57 @@
 <script>
   import { getAudioUrl } from '$lib/utils.js';
-  import { chatStore } from '$lib/stores.svelte'; // Importiamo l'istanza singleton
+  import { chatStore } from '$lib/stores.svelte';
+  import AudioManager, { play, stop, getCurrentUrl } from '$lib/audioManager.js';
 
-  // Sostituiamo export let con $props()
   let { msg, language } = $props();
-
-  // Sostituiamo $: con $derived
   let isAi = $derived(msg.mittente !== 'Io');
 
   function toggleAiText() {
-    // Non usiamo più .update(), ma assegniamo direttamente il valore
     chatStore.showAiText = !chatStore.showAiText;
   }
 
-  // Sostituiamo $: con $derived per le variabili calcolate
   let audioUrl = $derived(getAudioUrl(msg.audio, msg.audio_format || 'webm'));
   let showText = $derived(msg.testo?.trim());
   let showAudio = $derived(!!msg.audio);
 
-  // Sostituiamo let con $state per le variabili locali reattive
   let isPlaying = $state(false);
-  let audioObj = null;
 
   function toggleAudio() {
     if (!audioUrl) return;
-
-    if (audioObj && isPlaying) {
-      audioObj.pause();
+    const current = getCurrentUrl();
+    if (current === audioUrl) {
+      stop();
       isPlaying = false;
       return;
     }
 
-    if (!audioObj) {
-      audioObj = new Audio(audioUrl);
-      audioObj.onended = () => { isPlaying = false; };
-      audioObj.onpause = () => { isPlaying = false; };
-      audioObj.onplay = () => { isPlaying = true; };
+    const a = play(audioUrl);
+    if (a) {
+      isPlaying = true;
+      a.onended = () => { isPlaying = false; };
+      a.onpause = () => { isPlaying = false; };
+      a.onplay = () => { isPlaying = true; };
     }
-
-    audioObj.play().catch(err => console.error('Audio play failed:', err));
   }
 
-  // Sostituiamo onDestroy con la funzione di cleanup di $effect
   $effect(() => {
-    return () => {
-      if (audioObj) {
-        audioObj.pause();
-        audioObj = null;
+    // Auto-play AI audio immediately and ensure single playback via AudioManager
+    if (isAi && showAudio && audioUrl) {
+      const a = play(audioUrl);
+      if (a) {
+        isPlaying = true;
+        a.onended = () => { isPlaying = false; };
+        a.onpause = () => { isPlaying = false; };
+        a.onplay = () => { isPlaying = true; };
       }
+    }
+
+    return () => {
+      // If the currently playing audio belongs to this message, stop it on unmount
+      if (getCurrentUrl() === audioUrl) {
+        stop();
+      }
+      isPlaying = false;
     };
   });
 </script>
