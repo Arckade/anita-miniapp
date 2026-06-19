@@ -1,6 +1,5 @@
 export const getBackendUrl = () => {
-    const url = new URL(import.meta.env.VITE_BACKEND);
-    return `http://${url.host}/api/v1`;
+    return new URL(import.meta.env.VITE_BACKEND_HTTP);
 };
 
 /**
